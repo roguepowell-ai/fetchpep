@@ -71,6 +71,25 @@ log for 24 Sep.
 
 Ordered. Nothing below moves until the item above it does.
 
+**O-50 to O-53 · The game stack has four gaps with no decision.** Each needs an ID before
+any `.tf` file is written. Claude's recommendation is in brackets; George said "no
+preference" on 51 to 53 on 24 Sep, which is not yet a decision.
+
+- **O-50 · Where game logic runs.** TypeScript modules inside open-source Nakama, or a
+  separate Core API. [Inside Nakama: one server to run and pay for.] Open-source Nakama
+  supports TypeScript, Lua and Go runtime modules — heroiclabs/nakama README
+- **O-51 · Where Nakama's database lives.** D-057 chose Neon for a Core API that O-50 may
+  remove. [PostgreSQL 16 on the same VM, disk snapshots in Terraform.] Neon or Cloud SQL
+  in London are the alternatives
+- **O-52 · Where Terraform runs and keeps state.** [HCP Terraform for state and runs; one
+  bootstrap run from Google Cloud Shell for the trust setup and the kill switch — the
+  exception proposed in `ops/INFRA.ops.md`.] The alternative is Cloud Shell only, with state
+  in a Cloud Storage bucket
+- **O-53 · How phones reach the server, and where sprites live.** Port 7350 needs a
+  hostname and TLS; only `art.inkfold.game` exists as an identifier (D-049). [Cloudflare
+  Tunnel — no inbound ports on the VM — and sprites on Cloudflare R2.] Caddy on the VM, or
+  Google-only, are the alternatives
+
 **O-31 · HCP Terraform has no VCS provider.**
 Checked 24 Sep at `app.terraform.io/app/fetchpep/settings/version-control` — *"There are no
 VCS providers configured in this organization"*. The organisation `fetchpep` exists and is
@@ -112,7 +131,8 @@ can currently confirm.
   `node hooks/guard-write.mjs` for every write; without Node the whole blocked tier does
   nothing. Check the moment Claude Code opens
 - **O-44 · resolved 24 Sep by D-055.** Nakama on a VM in London for the pilot. The Heroic
-  Cloud account George created (org `fetchpep-studio`, title `inkfold`) stays unused
+  Cloud account George created (org `fetchpep-studio`, title `inkfold`) stays unused —
+  D-060, O-49
 - **O-4 · Is there an iPhone?** Without one the TestFlight gate is unreachable.
 - **O-5 · Android test device.** Not bought. Physical supply chain plus a customs question.
 - **O-6 · Apple Developer enrolment.** Failed once on a restricted network, cause unknown.
@@ -168,8 +188,8 @@ can currently confirm.
   says `region_*` and lists submissions in `directory` (D-051, D-052); `nakama.md` says
   "sharding on region"; `infra.md` rule 4 says EU only (D-043 is London). Apply from the
   first Claude Code session
-- **O-41 · Crash reporting — Unity's own tooling or Sentry.** D-042 removed Crashlytics.
-  Needed before the first build anyone else runs
+- **O-41 · Crash reporting — resolved 24 Sep by D-059.** Unity's built-in Diagnostics,
+  Unity 6.2 or later
 - **O-42 · CI runs six of the eight checks.** `secrets`, `versions` and `naming` exist only
   in `.githooks/pre-push`, which has never run (O-35), so they gate nothing. Wiring them in
   is a workflow edit — execution-granting, so it cannot be written remotely
@@ -186,6 +206,11 @@ can currently confirm.
   Cornwall" and the design system README lists *region* as vocabulary (D-051 retires it); the
   App Shell's "Who's playing" picker assumes members have no login (D-054 gives them one).
   The boards live in the Inkfold design system, which is George's to edit
+- **O-49 · The Heroic Cloud account holds a payment card and is not in the stack.** On 24
+  Sep George added card details after Heroic Labs' documentation links led to its sign-up
+  pages; no plan was started. An unused account with a card is a cost risk until closed.
+  George removes the card or closes the account. **Evidence to close:** the billing page
+  showing no plan and no card
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line
