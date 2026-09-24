@@ -25,7 +25,7 @@ migration. The point is to notice, not to pre-build.
 | Postgres size | 60% of the Neon plan | — | |
 | R2 Class B operations / month | **TBD** | — | Egress is free, reads are not. Atlas bundling is the lever |
 | Submissions / week | Exceeds what one person can screen | D-021 solo developer | The content pipeline is the bottleneck, not the servers |
-| Time to build one creature | Whatever O-1 measures | D-045 | Sets how fast the website can supply the game with creatures |
+| Time to build one creature | Whatever O-1 measures | D-058 | Pilot creatures are seeded by hand; this sets how many the pilot world can hold |
 | BigQuery bytes scanned / month | **TBD** | — | A missing partition filter shows up here first |
 
 `TBD` means nobody has measured it yet, not that it does not matter. Fill each one the
@@ -33,10 +33,9 @@ first time there is a real number, not an estimate.
 
 ## The one that matters
 
-**Time to build one creature** sets how fast the website can supply the game. Under D-045
-creature creation is a separate web experience, so this number no longer decides what the
-product is — but a game with too few creatures has too little to encounter. It has been
-open since the first plan.
+**Time to build one creature.** Pilot creatures are seeded by hand (D-058), so this number
+sets how many creatures the pilot world holds — and a world with few creatures has little
+to encounter. It has been open since the first plan.
 
 ## What not to do
 

@@ -4,15 +4,15 @@ authority: claude-proposes
 
 # Data model
 
-> **Partly written.** The place hierarchy and the schema split below are on record, with
-> decision IDs. Everything else that belongs here was worked out in planning conversation
+> **Partly written.** The place hierarchy, the schema split and the creature credentials
+> below are on record, with decision IDs. Everything else that belongs here was worked out in planning conversation
 > and never written to any store — see `state/OPEN.state.md` O-18. Do not let Claude
 > reconstruct the rest from memory and present it as a record.
 
 ## What belongs here
 
-The schema, both sides of the seam, and the warehouse star schema. The game's database
-only — the website's submission store is separate (D-052) and is specified with the website.
+The game's schema, both sides of the seam, and the warehouse star schema. The website's
+data is specified with the website (D-045, D-052).
 
 ## The place hierarchy — D-053
 
@@ -38,7 +38,7 @@ term (D-051). Tree structure and ancestry are in `spec/PLACES.spec.md`.
 
 | Family | Scope | Write rate | Holds |
 |---|---|---|---|
-| `directory` | Global, one | Low | Game identity, the place tree, the creature catalogue with its tag and provenance, encounter tables |
+| `directory` | Global, one | Low | Game identity, the place tree, the creature catalogue with its credentials (D-058), encounter tables |
 | `shard_*` — e.g. `shard_gi` | One per shared-player instance | High | Folds, gameplay, ledger |
 
 A **shard** is the instance players share. Players never see the word; they see the
@@ -48,13 +48,21 @@ instance's name. *Region* in this repo means a cloud location only.
 `directory.v_seam_violations`, which must return zero rows. The seam is what makes a second
 shard possible later without a rewrite.
 
-## What is not in the game's database — D-052
+## Creatures and captures — D-058
 
-Submissions, original photographs and screening belong to the website. The game receives
-a creature once, by a one-way publish (D-046), into `directory.catalogue`: the sprite
-reference, the tag (D-048), the place it is credited to, and provenance. Nothing flows back.
+The game's catalogue does not record where a creature came from. It records credentials:
 
-This replaces the earlier record, which listed *submissions* inside `directory`.
+| Record | Fields the game needs |
+|---|---|
+| Creature (`directory.catalogue`) | artist · creator · sprite reference · habitat · rarity |
+| Capture (`shard_*`) | creature · caught by (member) · caught at (capture time) |
+
+Pilot creatures are seeded; artist and creator are both **Joshua**. Artist and creator are
+credentials, not links to member accounts — a seeded creature has no member behind it.
+George's 26 Aug data model tied a creature's maker to a `member_id`; D-058 does not, and
+that model is kept in the FetchPep Project as source, not as the game's schema.
+
+Submissions, original photographs and screening are not in the game's database (D-052).
 
 ## The ledger
 

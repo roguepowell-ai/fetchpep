@@ -29,22 +29,19 @@ citing nothing.
 
 **O-24 · Lawful basis.**
 Not settled and not Claude's to settle. Needed before any personal data is collected. The
-same conversation with a lawyer should cover D-048: whether a creature and its maker's tag
-may stay after an erasure request, and what happens to a **self-chosen** tag, which can
-identify its maker.
+same conversation with a lawyer should cover D-056 — whether a creature may stay after its
+maker asks to be erased — and whether a **self-chosen** tag, which can identify its maker,
+is allowed at all.
 
-**O-40 · The archival original after erasure.**
-The website keeps each submitted photograph untouched, camera metadata included — often a
-home location. D-048 keeps the creature after erasure; nothing yet says whether the
-original photograph goes. Web side, D-052.
+**O-40 · Website: the original photograph.** For the website's own spec, not the game's.
+D-025 keeps each submitted original untouched; George's 26 Aug data model stores it "EXIF
+stripped, auto-cropped before write". One has to give.
 
 ## Blocking launch content
 
-**O-1 · Build one creature by hand and time it.** *Reframed 24 Sep by D-045.*
-Creature creation is the website, not the game. This number no longer decides what the
-product is; it decides how fast the website can supply the game, and a game with few
-creatures has little to encounter. Needs a sprite editor and an afternoon — no toolchain,
-no accounts, no device.
+**O-1 · Build one creature by hand and time it.** *Reframed 24 Sep by D-058.*
+The pilot's creatures are seeded, built by hand by Joshua. How long one takes sets how many
+creatures the pilot world can hold. Needs a sprite editor and an afternoon.
 
 ## Blocking nothing yet, but cheap now
 
@@ -114,15 +111,8 @@ can currently confirm.
 - **O-43 · Is Node on the PC's `PATH`?** Never checked. `.claude/settings.json` runs
   `node hooks/guard-write.mjs` for every write; without Node the whole blocked tier does
   nothing. Check the moment Claude Code opens
-- **O-44 · Heroic Cloud or self-hosted Nakama?** George created a Heroic Cloud account on
-  24 Sep (org `fetchpep-studio`, title `inkfold`). Not yet a decision. It changes four
-  recorded things: [certain] Heroic Cloud runs Nakama Enterprise, which clusters, so
-  `ops/SCALING.ops.md` and `.claude/rules/nakama.md` ("does not cluster") would be wrong;
-  it brings its own managed database beside Neon; its price is quoted in its console, not
-  published, and `ops/COSTS.ops.md` budgets Nakama at about £11/month on a VM against a
-  £200 ceiling (D-022); and it must run in London for D-043 — its site names North America,
-  Europe and Asia, "more regions on request". Player identities (D-047) would sit with
-  Heroic Labs as a processor
+- **O-44 · resolved 24 Sep by D-055.** Nakama on a VM in London for the pilot. The Heroic
+  Cloud account George created (org `fetchpep-studio`, title `inkfold`) stays unused
 - **O-4 · Is there an iPhone?** Without one the TestFlight gate is unreachable.
 - **O-5 · Android test device.** Not bought. Physical supply chain plus a customs question.
 - **O-6 · Apple Developer enrolment.** Failed once on a restricted network, cause unknown.
@@ -173,7 +163,7 @@ can currently confirm.
   (O-36). `george-only`: Claude proposes the text, George applies it
 - **O-38 · `rules/` teaches retired vocabulary.** `LANGUAGE.rule.md` lists **region** as a
   game term (D-051 removes it). `NON-NEGOTIABLES.rule.md` says attribution is "by name and
-  place" (D-048 makes it tag and place). `george-only`
+  place" (D-056 makes it tag and place). `george-only`
 - **O-39 · `.claude/rules/` is out of date and cannot be written remotely.** `api-seam.md`
   says `region_*` and lists submissions in `directory` (D-051, D-052); `nakama.md` says
   "sharding on region"; `infra.md` rule 4 says EU only (D-043 is London). Apply from the
@@ -188,6 +178,14 @@ can currently confirm.
   `C:\Users\laure\OneDrive\Desktop\`, and on 24 Sep George said sync is off for it and the
   note about it could go. Either D-039 is superseded (the current path stands) or the repo
   moves before a Unity project exists. George's call; free now
+- **O-47 · Sign-in methods.** D-054 says the steward and every member have their own login.
+  Which method each uses is open: the 26 Aug data model says Apple or Google for both; the
+  design boards show the steward on email and password and members picking their name on a
+  shared phone
+- **O-48 · The design boards predate today's decisions.** The Atlas board says "Region —
+  Cornwall" and the design system README lists *region* as vocabulary (D-051 retires it); the
+  App Shell's "Who's playing" picker assumes members have no login (D-054 gives them one).
+  The boards live in the Inkfold design system, which is George's to edit
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line

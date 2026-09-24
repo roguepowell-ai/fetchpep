@@ -30,7 +30,7 @@ Codename not product name, per D-034. Two environments, per D-035.
 ### Region — D-043
 
 **London.** Google Cloud `europe-west2` for every resource that takes a location; Neon
-`aws-eu-west-2`. [certain] Neon offers only two European regions, Frankfurt and London, both
+`aws-eu-west-2` for the build, reviewed before real players arrive (D-057). [certain] Neon offers only two European regions, Frankfurt and London, both
 on AWS — so the database city fixes the server city, and London puts both in one place.
 
 *Region* here means a cloud location and nothing else. The game has no regions (D-051).
@@ -50,7 +50,7 @@ later Firebase setup offers to create one, the answer is no without a decision.
 |---|---|
 | GitHub | `roguepowell-ai/fetchpep`, **public**. Ruleset on `main` binding: `contract` shows **Required** on PRs. Secret scanning and push protection on |
 | HCP Terraform | Organisation `fetchpep` exists. **No VCS provider connected, no workspace.** See O-31, O-29 |
-| Heroic Cloud | Account created by George, 24 Sep — org `fetchpep-studio`, title `inkfold`. Contents not checked. Whether Nakama is hosted here or self-hosted is **not decided** — O-44 |
+| Heroic Cloud | Account created by George, 24 Sep — org `fetchpep-studio`, title `inkfold`. **Unused:** Nakama runs on a VM in London for the pilot (D-055) |
 | Cloudflare, Neon, Stripe | Not created |
 | Apple, Google Play | Not created |
 
