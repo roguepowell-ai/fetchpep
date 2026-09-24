@@ -57,7 +57,14 @@ log for 24 Sep.
 
 - **O-2 · Q43 — does infrastructure say `region` or `shard`?** Free today, expensive once
   Terraform and the schema exist.
-- **O-3 · D-035 — one deployed environment or two?**
+- **O-3 · D-035 — resolved 24 Sep.** Two environments, two GCP projects, both created
+- **O-29 · HCP Terraform apply method unverified.** [likely] workspaces default to manual
+  apply, but with the repo connected an auto-apply workspace would provision real
+  infrastructure on merge with nobody clicking — which `CLAUDE.md` section 2 forbids.
+  Workspace → Settings → General → Apply Method must read **Manual apply**
+- **O-28 · Billing kill switch does not exist.** `ops/COSTS.ops.md` says it is built before
+  anything that can cost money. Two GCP projects now exist. If billing is attached to
+  either, the only failure in this system with no ceiling has no control in front of it
 
 ## Blocking the first build
 
@@ -83,8 +90,15 @@ log for 24 Sep.
 
 ## Housekeeping
 
-- **O-21** · Branch protection on `main` — require a PR and the `contract` check. The only
-  part of the enforcement design that works without a local Claude Code seat
+- **O-21** · Branch protection on `main`. **Corrected 24 Sep:** [certain] GitHub does not
+  enforce rulesets *or* classic branch protection on a **private** repository on the free
+  plan — both settings pages carry the banner, and a rule created there appears in settings
+  while blocking nothing. An imagined control is worse than a missing one. Resolved by
+  moving to GitHub Team (~£4/month). Until that lands, `.githooks/pre-push` is the
+  substitute: local, fast, bypassable with `--no-verify`
+- **O-27** · **Transfer the repo to an organization.** GitHub Team is an org plan and
+  `roguepowell-ai` is a personal account. The transfer changes the repo URL and the git
+  remote. Cheap now — two commits, no Unity project, no LFS history. Expensive later
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line
