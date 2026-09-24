@@ -20,7 +20,10 @@ version" does not work — this does, because it is told rather than remembered.
 | Unity CLI | `TBD` | not pinnable | Installed from the **beta** channel |
 | Node | `TBD` | `.nvmrc` | |
 | pnpm | `TBD` | `packageManager` in `package.json` | |
-| Terraform | `TBD` | `.terraform-version` | |
+| Terraform | `1.16.4` | `infra/.terraform-version` · `required_version` in each stack | Extracted binary in Downloads, not on `PATH` (O-34). Cloud Shell must run the same version |
+| Terraform `hashicorp/google` | `8.4.0` | `versions.tf` · `.terraform.lock.hcl` | Locked for `linux_amd64` (Cloud Shell) and `windows_amd64` |
+| Terraform `hashicorp/archive` | `2.8.1` | `versions.tf` · `.terraform.lock.hcl` | Zips the kill-switch source |
+| Cloud Run functions runtime | `nodejs24` | `infra/bootstrap/kill_switch.tf` | The kill switch. No npm dependencies; the platform supplies the Functions Framework |
 | Nakama | `TBD` | docker tag, exact — never `:latest` | |
 | Postgres | `TBD` | Neon project setting | |
 | dbt | `TBD` | `requirements.txt`, exact | |

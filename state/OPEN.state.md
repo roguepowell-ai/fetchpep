@@ -99,6 +99,9 @@ by D-070 — the one time an agent writes the kill switch. Closes O-28 when appl
 applies in Cloud Shell with George signed in; a test budget notification in dry-run mode
 produces the "would detach" log line; then dry-run is switched off by George.
 
+**Status, 24 Sep:** built on branch `kill-switch-b001`, PR open, not applied. Steps 1 to 6
+done by the developer; everything from the review onward is still to happen.
+
 ## Blocking any infrastructure at all
 
 Ordered. Nothing below moves until the item above it does.
@@ -134,9 +137,18 @@ from connecting GitHub as a VCS provider, and only the second one makes runs hap
 pull request. Connecting it is an OAuth grant against the GitHub account and is George's to
 approve.
 
-**O-32 · There is no `infra/` directory and no `.tf` file.**
-`.claude/rules/infra.md` routes on `infra/**/*.tf`. Nothing matches it, so the rule has
-never fired. A workspace created today would have nothing to plan.
+**O-32 · There is no `infra/` directory and no `.tf` file — resolved on the B-001 branch.**
+`infra/bootstrap/` holds `versions.tf` and `kill_switch.tf`; `terraform validate` passes.
+Closes when the PR merges. `workload_identity.tf`, named in `spec/DATA-MODEL.spec.md`, is
+not written: B-001 covers the kill switch only, so the trust setup needs its own brief.
+
+**O-67 · The `fetchpep-bootstrap` workspace must run in local execution mode.**
+`infra/bootstrap/versions.tf` stores state in HCP Terraform (D-064) under a `cloud` block.
+The workspace is created by the first `terraform init` in Cloud Shell and defaults to
+remote execution. A remote run has no Google credentials and fails, which is harmless, but
+it is not the bootstrap D-064 describes. Before the first plan, George sets Workspace →
+Settings → General → Execution mode to **Local**. Also: O-57, because the state carries the
+billing account id.
 
 **O-29 · HCP Terraform apply method — cannot be verified, because there is no workspace.**
 Checked 24 Sep at `app.terraform.io/app/fetchpep/workspaces` — *"Add your first
@@ -160,11 +172,11 @@ can currently confirm.
 
 ## Blocking the first build
 
-- **O-20 · Claude Code on the Windows PC — seat decided 24 Sep by D-069.** The Claude desktop
-  app on George's PC, in the repo folder. Closes when the first session reports
-  `node --version` and `git --version` (brief B-001, step 1)
-- **O-43 · Node on the PC — installed 24 Sep** (`C:\Program Files\nodejs`), with Git for Windows.
-  Closes when a Claude Code session shows `node --version`: the write hook depends on it
+- **O-20 · Claude Code on the Windows PC — resolved 24 Sep.** Seat decided by D-069.
+  **Evidence:** the first session ran `node --version` → `v24.21.0` and `git --version` →
+  `git version 2.55.0.windows.5` (brief B-001, step 1; outputs in the B-001 PR)
+- **O-43 · Node on the PC — resolved 24 Sep.** **Evidence:** `node --version` → `v24.21.0`
+  from a Claude Code session. The write hook ran on every write in that session
 - **O-44 · resolved 24 Sep by D-055.** Nakama on a VM in London for the pilot. The Heroic
   Cloud account George created (org `fetchpep-studio`, title `inkfold`) stays unused —
   D-060, O-49
@@ -204,9 +216,10 @@ can currently confirm.
   Server-side, so unlike `.githooks/pre-push` it cannot be bypassed with `--no-verify`.
   This item was named in the PR #1 description as having been added to this file. It had
   not been. Recorded here rather than quietly corrected.
-- **O-35 · `.githooks/pre-push` has never run.** It is committed, but `core.hooksPath` is
-  not set in the working copy, so GitHub Desktop pushed straight past it. One command in
-  the repo root: `git config core.hooksPath .githooks`. Until then the hook is documentation.
+- **O-35 · `.githooks/pre-push` — resolved 24 Sep.** `git config core.hooksPath .githooks`
+  run in the working copy; `git config core.hooksPath` now returns `.githooks`. The hook's
+  first run is the push of the B-001 branch, and its output is in that PR. Per clone: a
+  fresh clone still has to run the same command
 - **O-36 · resolved 24 Sep by D-068.** `infra/` is `claude-proposes` in `CLAUDE.md` section 6
 - **O-37 · resolved 24 Sep by D-068.** Section 9 states six checks in CI and three in the hook;
   section 4 reads "global/shard seam" and "Folds, places"
