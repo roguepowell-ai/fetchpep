@@ -23,7 +23,8 @@ version" does not work — this does, because it is told rather than remembered.
 | Terraform | `1.16.4` | `infra/.terraform-version` · `required_version` in each stack | Extracted binary in Downloads, not on `PATH` (O-34). Cloud Shell must run the same version |
 | Terraform `hashicorp/google` | `8.4.0` | `versions.tf` · `.terraform.lock.hcl` | Locked for `linux_amd64` (Cloud Shell) and `windows_amd64` |
 | Terraform `hashicorp/archive` | `2.8.1` | `versions.tf` · `.terraform.lock.hcl` | Zips the kill-switch source |
-| Cloud Run functions runtime | `nodejs24` | `infra/bootstrap/kill_switch.tf` | The kill switch. No npm dependencies; the platform supplies the Functions Framework |
+| Cloud Run functions runtime | `nodejs24` | `infra/bootstrap/kill_switch.tf` | The kill switch |
+| `@google-cloud/functions-framework` | `5.0.5` | `infra/bootstrap/function/package.json` · `package-lock.json` | The kill switch's only declared dependency. Needs a decision ID under R-SEC-04 (O-68) |
 | Nakama | `TBD` | docker tag, exact — never `:latest` | |
 | Postgres | `TBD` | Neon project setting | |
 | dbt | `TBD` | `requirements.txt`, exact | |

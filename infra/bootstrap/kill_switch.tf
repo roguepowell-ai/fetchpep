@@ -52,20 +52,27 @@ variable "dry_run" {
 }
 
 locals {
-  project_id = "fetchpep-dev"
-  location   = "europe-west2" # D-043
+  project_id     = "fetchpep-dev"
+  project_number = "424117215837" # ops/INFRA.ops.md; public by design, permanent
+  location       = "europe-west2" # D-043
+
+  kill_budget_name = "fetchpep-dev-kill"
 
   # [certain] Pub/Sub budget notifications are published by this Google-owned account.
   budget_publisher = "serviceAccount:billing-budget-alert@system.gserviceaccount.com"
 
-  # Spend is counted BEFORE credits. See the pull request for the reasoning; in short, a
-  # runaway spends promotional credit first, and a switch counting after credits would
-  # sit at zero while that happens and only start counting once real money is going.
+  # Spend is counted BEFORE credits.
+  #
+  # The switch exists for a runaway, and credits hide one: counted after credits, a loop
+  # burning promotional or free-trial credit reads as zero, and the switch only starts
+  # counting once the credit is gone and real money is moving. Billing data arrives hours
+  # late, so by the time a net figure crosses the line the overrun has already happened.
+  #
+  # The cost of this choice is that gross spend is never below net, so the switch fires at
+  # or before 30 of real money, never after. D-071 set 30 above normal running cost (the
+  # e2-small at about 15.76 a month); gross cost adds whatever free-tier usage would have
+  # absorbed, which at this scale is small but unmeasured until the first bill (O-23).
   credit_treatment = "EXCLUDE_ALL_CREDITS"
-}
-
-data "google_project" "dev" {
-  project_id = local.project_id
 }
 
 # ------------------------------------------------------------------------ APIs
@@ -93,7 +100,7 @@ resource "google_project_service" "apis" {
 # ------------------------------------------------------------------ the topic
 
 resource "google_pubsub_topic" "budget" {
-  name = "fetchpep-budget-alerts"
+  name = "fetchpep-dev-kill-budget"
 
   message_storage_policy {
     allowed_persistence_regions = [local.location]
@@ -116,7 +123,7 @@ resource "google_billing_budget" "warn" {
   display_name    = "fetchpep-dev-warn"
 
   budget_filter {
-    projects               = ["projects/${data.google_project.dev.number}"]
+    projects               = ["projects/${local.project_number}"]
     calendar_period        = "MONTH"
     credit_types_treatment = local.credit_treatment
   }
@@ -140,10 +147,10 @@ resource "google_billing_budget" "warn" {
 
 resource "google_billing_budget" "kill" {
   billing_account = var.billing_account
-  display_name    = "fetchpep-dev-kill"
+  display_name    = local.kill_budget_name
 
   budget_filter {
-    projects               = ["projects/${data.google_project.dev.number}"]
+    projects               = ["projects/${local.project_number}"]
     calendar_period        = "MONTH"
     credit_types_treatment = local.credit_treatment
   }
@@ -173,7 +180,7 @@ resource "google_billing_budget" "kill" {
 
 # Runs the function. Its only power is unlinking billing from fetchpep-dev.
 resource "google_service_account" "kill_switch" {
-  account_id   = "fetchpep-kill-switch"
+  account_id   = "fetchpep-dev-kill-switch"
   display_name = "Billing kill switch: detaches billing from fetchpep-dev"
   depends_on   = [google_project_service.apis]
 }
@@ -184,7 +191,7 @@ resource "google_service_account" "kill_switch" {
 # project. Google's own sample grants Billing Account Administrator instead; that is the
 # power to reassign or close the account, and a function has no need of it.
 resource "google_project_iam_custom_role" "detach_billing" {
-  role_id     = "fetchpepDetachBilling"
+  role_id     = "fetchpepDevDetachBilling"
   title       = "Detach billing from this project"
   description = "Unlink the project from its billing account. Nothing else."
   permissions = ["resourcemanager.projects.deleteBillingAssignment"]
@@ -198,7 +205,7 @@ resource "google_project_iam_member" "kill_switch_detach" {
 
 # Delivers Pub/Sub messages to the function. Can invoke that one service and nothing else.
 resource "google_service_account" "kill_trigger" {
-  account_id   = "fetchpep-kill-trigger"
+  account_id   = "fetchpep-dev-kill-trigger"
   display_name = "Billing kill switch: delivers budget messages to the function"
   depends_on   = [google_project_service.apis]
 }
@@ -212,27 +219,54 @@ resource "google_cloud_run_service_iam_member" "kill_trigger_invoke" {
 
 # Builds the function. Named explicitly so the build depends on neither the Compute
 # Engine default account (which does not exist until that API is on) nor its Editor role.
+# [certain] Google documents three roles for a custom build account: log writer,
+# Artifact Registry writer, and object viewer on the source, which the platform copies
+# into its own gcf-v2-sources-* bucket before building.
 resource "google_service_account" "kill_build" {
-  account_id   = "fetchpep-kill-build"
+  account_id   = "fetchpep-dev-kill-build"
   display_name = "Billing kill switch: builds the function image"
   depends_on   = [google_project_service.apis]
 }
 
-resource "google_project_iam_member" "kill_build" {
-  for_each = toset([
-    "roles/logging.logWriter",
-    "roles/artifactregistry.writer",
-  ])
-
+resource "google_project_iam_member" "kill_build_logs" {
   project = local.project_id
-  role    = each.value
+  role    = "roles/logging.logWriter"
   member  = google_service_account.kill_build.member
 }
 
-resource "google_storage_bucket_iam_member" "kill_build_source" {
-  bucket = google_storage_bucket.source.name
-  role   = "roles/storage.objectViewer"
-  member = google_service_account.kill_build.member
+# Object viewer at project level is what Google documents; the condition narrows it to the
+# two buckets the build reads. [likely] The platform's bucket is named
+# gcf-v2-sources-<project number>-<location>.
+resource "google_project_iam_member" "kill_build_source" {
+  project = local.project_id
+  role    = "roles/storage.objectViewer"
+  member  = google_service_account.kill_build.member
+
+  condition {
+    title       = "kill-switch-sources-only"
+    description = "Only the kill-switch source bucket and the platform's function source bucket."
+    expression  = <<-EOT
+      resource.name.startsWith("projects/_/buckets/${google_storage_bucket.source.name}") ||
+      resource.name.startsWith("projects/_/buckets/gcf-v2-sources-${local.project_number}-${local.location}")
+    EOT
+  }
+}
+
+resource "google_artifact_registry_repository" "kill_switch" {
+  repository_id = "fetchpep-dev-kill-switch"
+  location      = local.location
+  format        = "DOCKER"
+  description   = "Images of the billing kill switch function. Nothing else."
+
+  depends_on = [google_project_service.apis]
+}
+
+# Writer on this one repository, not on every repository in the project.
+resource "google_artifact_registry_repository_iam_member" "kill_build" {
+  repository = google_artifact_registry_repository.kill_switch.name
+  location   = local.location
+  role       = "roles/artifactregistry.writer"
+  member     = google_service_account.kill_build.member
 }
 
 # ------------------------------------------------------------------ the source
@@ -251,7 +285,7 @@ data "archive_file" "function" {
   type        = "zip"
   source_dir  = "${path.module}/function"
   output_path = "${path.module}/.build/kill-switch.zip"
-  excludes    = ["node_modules"]
+  excludes    = ["node_modules", "kill-switch.test.cjs"]
 }
 
 # The object name carries the hash, so a change to the source redeploys the function.
@@ -264,13 +298,14 @@ resource "google_storage_bucket_object" "function" {
 # ---------------------------------------------------------------- the function
 
 resource "google_cloudfunctions2_function" "kill_switch" {
-  name     = "fetchpep-kill-switch"
+  name     = "fetchpep-dev-kill-switch"
   location = local.location
 
   build_config {
-    runtime         = "nodejs24"
-    entry_point     = "killSwitch"
-    service_account = google_service_account.kill_build.id
+    runtime           = "nodejs24"
+    entry_point       = "killSwitch"
+    service_account   = google_service_account.kill_build.id
+    docker_repository = google_artifact_registry_repository.kill_switch.id
 
     source {
       storage_source {
@@ -289,9 +324,13 @@ resource "google_cloudfunctions2_function" "kill_switch" {
     all_traffic_on_latest_revision = true
     service_account_email          = google_service_account.kill_switch.email
 
+    # The threshold is the function's own setting, not the amount a message carries, so
+    # a message from any other budget cannot trip it.
     environment_variables = {
-      PROJECT_ID = local.project_id
-      DRY_RUN    = var.dry_run ? "true" : "false"
+      PROJECT_ID  = local.project_id
+      KILL_BUDGET = local.kill_budget_name
+      KILL_AMOUNT = tostring(var.kill_amount)
+      DRY_RUN     = var.dry_run ? "true" : "false"
     }
   }
 
@@ -304,8 +343,9 @@ resource "google_cloudfunctions2_function" "kill_switch" {
   }
 
   depends_on = [
-    google_project_iam_member.kill_build,
-    google_storage_bucket_iam_member.kill_build_source,
+    google_project_iam_member.kill_build_logs,
+    google_project_iam_member.kill_build_source,
+    google_artifact_registry_repository_iam_member.kill_build,
   ]
 }
 

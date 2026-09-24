@@ -99,8 +99,21 @@ by D-070 — the one time an agent writes the kill switch. Closes O-28 when appl
 applies in Cloud Shell with George signed in; a test budget notification in dry-run mode
 produces the "would detach" log line; then dry-run is switched off by George.
 
-**Status, 24 Sep:** built on branch `kill-switch-b001`, PR open, not applied. Steps 1 to 6
-done by the developer; everything from the review onward is still to happen.
+**Status, 24 Sep:** built on branch `kill-switch-b001`, not applied. PR #9, opened by
+operations (the PR page reads *Open*). The first review returned *changes needed*; the
+fixes are the branch's second commit. Everything from a passing review onward is still to
+happen. Outputs from the developer's session:
+
+```
+node --version                   v24.21.0
+git --version                    git version 2.55.0.windows.5
+git config core.hooksPath        .githooks
+terraform fmt -check -recursive  (no output) exit 0
+terraform validate               Success! The configuration is valid.  exit 0
+```
+
+`terraform` is `Downloads\terraform_1.16.4_windows_amd64\terraform.exe`, run in
+`infra/bootstrap/` after `terraform init -backend=false` (O-34).
 
 ## Blocking any infrastructure at all
 
@@ -137,9 +150,9 @@ from connecting GitHub as a VCS provider, and only the second one makes runs hap
 pull request. Connecting it is an OAuth grant against the GitHub account and is George's to
 approve.
 
-**O-32 · There is no `infra/` directory and no `.tf` file — resolved on the B-001 branch.**
-`infra/bootstrap/` holds `versions.tf` and `kill_switch.tf`; `terraform validate` passes.
-Closes when the PR merges. `workload_identity.tf`, named in `spec/DATA-MODEL.spec.md`, is
+**O-32 · There is no `infra/` directory and no `.tf` file — built on the B-001 branch.**
+`infra/bootstrap/` holds `versions.tf` and `kill_switch.tf`; `terraform validate` output is
+under B-001 above. Closes when PR #9 merges; until then `main` still has no `infra/`. `workload_identity.tf`, named in `spec/DATA-MODEL.spec.md`, is
 not written: B-001 covers the kill switch only, so the trust setup needs its own brief.
 
 **O-67 · The `fetchpep-bootstrap` workspace must run in local execution mode.**
@@ -149,6 +162,25 @@ remote execution. A remote run has no Google credentials and fails, which is har
 it is not the bootstrap D-064 describes. Before the first plan, George sets Workspace →
 Settings → General → Execution mode to **Local**. Also: O-57, because the state carries the
 billing account id.
+
+**O-68 · The kill switch depends on the Functions Framework — needs a decision ID
+(R-SEC-04).** The PR #9 review asked for it to be pinned (VERSIONS rule 1).
+`@google-cloud/functions-framework` `5.0.5` is now declared exactly, with a committed
+`package-lock.json` of 128 packages. R-SEC-04 makes a new dependency on a money path a
+decision. It is not new in substance: without the declaration, the platform installs the
+framework itself, at a version nobody chose. Developer's position: pin it. George confirms
+with an ID, or rules otherwise, before PR #9 merges.
+
+**O-69 · `CLAUDE.md` section 2 has no D-070 exception.** It reads "never touch billing
+configuration" without qualification, while `.claude/rules/infra.md` now carries the D-070
+exception. Raised by the PR #9 review. Section 2 is the hard-stops list and George's to
+word. Proposed: append "— except the kill switch's first version, written once under
+D-070" to that bullet. `CLAUDE.md` is at 150 of 150 lines, so it has to fit the same line.
+
+**O-70 · Nothing alerts when the kill switch errors.** A failed detach, or a dry run
+logging `couldDetach: false`, shows only in the function's logs. A log-based alert needs a
+notification channel, which needs an email address in Terraform. Deferred from B-001;
+changing the kill switch after merge is George's (D-070).
 
 **O-29 · HCP Terraform apply method — cannot be verified, because there is no workspace.**
 Checked 24 Sep at `app.terraform.io/app/fetchpep/workspaces` — *"Add your first
@@ -174,9 +206,10 @@ can currently confirm.
 
 - **O-20 · Claude Code on the Windows PC — resolved 24 Sep.** Seat decided by D-069.
   **Evidence:** the first session ran `node --version` → `v24.21.0` and `git --version` →
-  `git version 2.55.0.windows.5` (brief B-001, step 1; outputs in the B-001 PR)
+  `git version 2.55.0.windows.5` (brief B-001, step 1; outputs under B-001 above)
 - **O-43 · Node on the PC — resolved 24 Sep.** **Evidence:** `node --version` → `v24.21.0`
-  from a Claude Code session. The write hook ran on every write in that session
+  from a Claude Code session. Whether the write hook fires is not evidenced by this: no
+  write in that session was one the hook would refuse
 - **O-44 · resolved 24 Sep by D-055.** Nakama on a VM in London for the pilot. The Heroic
   Cloud account George created (org `fetchpep-studio`, title `inkfold`) stays unused —
   D-060, O-49
@@ -217,9 +250,10 @@ can currently confirm.
   This item was named in the PR #1 description as having been added to this file. It had
   not been. Recorded here rather than quietly corrected.
 - **O-35 · `.githooks/pre-push` — resolved 24 Sep.** `git config core.hooksPath .githooks`
-  run in the working copy; `git config core.hooksPath` now returns `.githooks`. The hook's
-  first run is the push of the B-001 branch, and its output is in that PR. Per clone: a
-  fresh clone still has to run the same command
+  run in the working copy; `git config core.hooksPath` now returns `.githooks`. **Evidence
+  it runs:** the push of `kill-switch-b001` printed `── contract checks ──`, eight `ok`
+  lines and `── all green ──` before the remote accepted it. Per clone: a fresh clone still
+  has to run the same command
 - **O-36 · resolved 24 Sep by D-068.** `infra/` is `claude-proposes` in `CLAUDE.md` section 6
 - **O-37 · resolved 24 Sep by D-068.** Section 9 states six checks in CI and three in the hook;
   section 4 reads "global/shard seam" and "Folds, places"
