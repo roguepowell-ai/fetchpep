@@ -79,6 +79,10 @@ exists — which is most of planning.
 | Sprites, layout, components | `spec/DESIGN.spec.md` · the Inkfold design system |
 | Cost, billing, anything that spends | `ops/COSTS.ops.md` |
 | Releasing, signing, uploading to a store | `ops/RUNBOOK.ops.md` · `ops/INFRA.ops.md` |
+| Secrets, authorization, uploads, third-party dependencies | `spec/SECURITY.spec.md` |
+| Personal data, retention, erasure, anything a person could be identified by | `spec/PRIVACY.spec.md` |
+| Whether to scale, shard, or raise a limit | `ops/SCALING.ops.md` · `state/DECISIONS.state.md` |
+| Adding or upgrading a package, or setting an API version | `ops/VERSIONS.ops.md` |
 | What was built and why | `state/SESSION-LOG.state.md` · `state/SUPERSEDED.state.md` |
 
 Several rows match: read all of them. None match: say so and ask.
@@ -138,13 +142,8 @@ A rule you have had to repeat twice belongs one tier up.
 
 ---
 
-## 9. What CI checks about this file
+## 9. CI
 
-| Check | Fails when |
-|---|---|
-| `checks/router-links.check.sh` | A referenced path does not exist |
-| `checks/router-orphans.check.sh` | A contract file exists that nothing routes to |
-| `checks/router-size.check.sh` | This file exceeds 150 lines |
-| `checks/frontmatter.check.sh` | A contract file has missing or invalid frontmatter |
-| `checks/authority.check.sh` | A Claude-authored commit touches a `george-only` file |
-| `checks/banned-terms.check.sh` | A banned term appears outside the contract files |
+Nine checks run on every push and block the merge. `checks/README.md` lists them and what
+each fails on. The orphan check is the one that matters: a contract file nothing routes to
+is unreachable after a compaction, not merely unread.

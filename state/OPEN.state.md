@@ -25,6 +25,34 @@ D-001 to D-032 exist in conversation only. `state/DECISIONS.state.md` section 2 
 IDs the rules files cite; each needs confirming or deleting. Until then several rules are
 citing nothing.
 
+## Blocking the schema
+
+**O-22 · Erasure versus the immutable ledger.**
+The ledger is append-only by database rule. Gibraltar GDPR includes a right to erasure.
+These conflict. `spec/PRIVACY.spec.md` proposes the standard resolution — the ledger holds
+an opaque subject id, the mapping to a person lives once in `directory`, and erasure severs
+the mapping — but it is **proposed, not decided**, and it has to be in the first migration.
+It cannot be retrofitted, because retrofitting means rewriting an append-only table.
+
+**O-24 · Lawful basis.**
+Not settled and not Claude's to settle. Needed before any personal data is collected.
+
+## Blocking nothing yet, but cheap now
+
+**O-23 · Tripwire thresholds.**
+`ops/SCALING.ops.md` has five `TBD` rows. Each needs a measured number, not an estimate.
+The one that matters is time-to-build-one-creature, which is O-1.
+
+**O-25 · Four security rules are prose only.**
+R-SEC-02 (never trust a client claim), R-SEC-03 (uploads are hostile), R-SEC-06 (logs are a
+data store) and R-SEC-07 (never hold verification data) have no check behind them, so they
+have the failure rate prose has. They become enforceable when there is code to check.
+
+**O-26 · `rules/` needs the R-SEC pointers.**
+`spec/SECURITY.spec.md` is canonical, but `rules/NON-NEGOTIABLES.rule.md` does not point at
+it. `rules/` is `george-only`, so Claude proposed and George applies. Text in the session
+log for 24 Sep.
+
 ## Blocking the world map
 
 - **O-2 · Q43 — does infrastructure say `region` or `shard`?** Free today, expensive once

@@ -27,6 +27,20 @@ const UNITY_REF = /\b(guid|fileID|m_CorrespondingSourceObject|m_PrefabInstance)\
 
 const BANNED_TERMS_FILE = "checks/banned-terms.txt";
 
+// R-SEC-01. A secret in git history is permanent — rotation is the only remedy — so
+// this blocks the write rather than catching the commit. Exempt a line with a trailing
+// `allow-secret:` comment; the exemption is then visible in the diff.
+const SECRET_PATTERNS = [
+  [/AKIA[0-9A-Z]{16}/, "an AWS access key id"],
+  [/\b[rs]k_(live|test)_[0-9a-zA-Z]{16,}/, "a Stripe key"],
+  [/\bgh[pousr]_[0-9A-Za-z]{30,}/, "a GitHub token"],
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, "a private key"],
+  [/\bAIza[0-9A-Za-z_-]{30,}/, "a Google API key"],
+  [/\bxox[baprs]-[0-9A-Za-z-]{10,}/, "a Slack token"],
+  [/(password|passwd|secret|api_?key|token)\s*[:=]\s*["'][^"']{12,}["']/i,
+   "a credential assigned inline"],
+];
+
 function refuse(reason, remedy) {
   process.stderr.write(`BLOCKED by hooks/guard-write.mjs\n\n${reason}\n\n${remedy}\n`);
   process.exit(BLOCK);
@@ -104,7 +118,25 @@ if (UNITY_REF.test(payload)) {
   );
 }
 
-// ------------------------------------------------------------------ 4. banned terms
+// ------------------------------------------------------------------- 4. secrets
+if (payload && !/^checks\//.test(rel) && !/^hooks\//.test(rel)) {
+  for (const line of payload.split("\n")) {
+    if (line.includes("allow-secret")) continue;
+    for (const [re, what] of SECRET_PATTERNS) {
+      if (re.test(line)) {
+        refuse(
+          `The change to ${rel} contains what looks like ${what} (R-SEC-01).`,
+          "A secret committed to git is permanent — removing the line does not remove it " +
+            "from history, and rotation becomes the only remedy. Put it in GitHub Actions " +
+            "secrets or Secret Manager and reference it by name. If this is a false " +
+            "positive, end the line with `allow-secret: why`."
+        );
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------------ 5. banned terms
 const isContractFile = /^(checks|rules)\//.test(rel);
 if (!isContractFile && payload) {
   const lower = payload.toLowerCase();

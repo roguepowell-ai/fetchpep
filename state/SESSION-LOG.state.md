@@ -21,6 +21,28 @@ What changed, and why. Newest first. One entry per working session.
   run: scoped rule paths were bare filenames that would not resolve
 - FetchPep Project populated. It had zero documents
 
+**Security, scaling, versions and naming given homes.**
+
+Audit first: of the five concerns raised, secrets had a `.gitignore` line and nothing else,
+authorization had one false-positive hit, PII had one line about EU regions, and naming had
+zero. Quality had mechanism but no gate. Versions had nothing.
+
+- `spec/SECURITY.spec.md` — canonical, R-SEC-01 to R-SEC-07, with an honest table showing
+  four of seven are prose only
+- `spec/PRIVACY.spec.md` — personal data inventory, the EXIF problem, and the
+  erasure-versus-ledger conflict (O-22)
+- `ops/SCALING.ops.md` — tripwires, each naming the decision it reopens
+- `ops/VERSIONS.ops.md` + `checks/versions.check.sh` — the answer to "which version am I
+  writing against" is told, not remembered
+- `hooks/guard-write.mjs` — now blocks credential patterns at write time (R-SEC-01).
+  Eight cases proved, including the `allow-secret` escape and an env-var reference
+- `checks/secrets.check.sh`, `checks/naming.check.sh`, `checks/README.md`
+- Router trimmed from 150 to 149: section 9's check table moved to `checks/README.md`,
+  which freed the lines for four new topic routes
+
+**Proposed for `rules/`, not applied.** `rules/` is `george-only`. The R-SEC pointers that
+`NON-NEGOTIABLES.rule.md` needs are George's edit, recorded as O-26.
+
 **Corrections logged.**
 
 - **A prohibition was written into a `george-only` file with no decision ID.** "Two stores,

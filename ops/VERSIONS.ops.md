@@ -1,0 +1,64 @@
+---
+authority: claude-proposes
+---
+
+# Versions
+
+**What is actually installed.** Not what is current, not what the documentation shows, not
+what the training data is full of. This file is the answer to "which version am I writing
+against", and `checks/versions.check.sh` fails the build when it disagrees with reality.
+
+Read this before writing code against anything listed here. A rule saying "use the right
+version" does not work — this does, because it is told rather than remembered.
+
+## Pinned
+
+| Thing | Version | Pinned where | Notes |
+|---|---|---|---|
+| Unity Editor | `TBD` | `ProjectSettings/ProjectVersion.txt` | Must be 6.0 LTS or later — `com.unity.pipeline` does not exist below it |
+| `com.unity.pipeline` | `TBD` | `Packages/manifest.json` | **`0.x-exp`.** Surface changes monthly. Expect breakage on upgrade |
+| Unity CLI | `TBD` | not pinnable | Installed from the **beta** channel |
+| Node | `TBD` | `.nvmrc` | |
+| pnpm | `TBD` | `packageManager` in `package.json` | |
+| Terraform | `TBD` | `.terraform-version` | |
+| Nakama | `TBD` | docker tag, exact — never `:latest` | |
+| Postgres | `TBD` | Neon project setting | |
+| dbt | `TBD` | `requirements.txt`, exact | |
+
+`TBD` is not a placeholder to leave. Fill each one the moment that thing is installed, in
+the same change that installs it.
+
+## Rules
+
+1. **Exact versions. No ranges, no `latest`, no `^`, no `~`.** A range means the build is
+   not reproducible and a green run today says nothing about tomorrow.
+2. **Lockfiles are committed.** `pnpm-lock.yaml`, `Packages/packages-lock.json`,
+   `.terraform.lock.hcl`.
+3. **An upgrade is its own change.** Never bundled with a feature. The diff should show
+   only the version and what broke.
+4. **This file is updated in the same commit as the upgrade**, or the check fails.
+
+## API versions
+
+Third-party APIs are pinned the same way and recorded here, because the failure is worse:
+code written against the wrong API version compiles, passes review, and fails in
+production.
+
+| API | Version | Where set |
+|---|---|---|
+| Stripe | `TBD` | API version header, set explicitly per request |
+| Google Play Developer API | `TBD` | client library version |
+| Cloudflare | `TBD` | |
+
+**Never rely on an account-level default API version.** It changes underneath you and the
+change is invisible in the diff. Set it per request.
+
+## Known version traps
+
+- [certain] `com.unity.pipeline` is experimental. Unity has already deprecated its own
+  in-Editor MCP server in favour of the CLI. Treat every upgrade as breaking.
+- [certain] `unity test` exit codes: **0** passed, **8** tests failed, **6** no verdict.
+  If a future version changes these, `.claude/rules/ci.md` is wrong and CI will
+  misreport.
+- [certain] Unity withdrew manual `.alf` activation for Personal licences. Any guide
+  describing an `activation.yml` workflow predates that change.
