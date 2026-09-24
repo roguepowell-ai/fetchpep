@@ -175,22 +175,16 @@ can currently confirm.
 - **O-35 · `.githooks/pre-push` has never run.** It is committed, but `core.hooksPath` is
   not set in the working copy, so GitHub Desktop pushed straight past it. One command in
   the repo root: `git config core.hooksPath .githooks`. Until then the hook is documentation.
-- **O-36 · `infra/` has no declared write authority.** `CLAUDE.md` section 6 lists `rules/`,
-  `spec/`, `ops/`, `state/`, `checks/` and `hooks/`. It does not list `infra/`. Terraform is
-  the one directory in this repo where a Claude write can spend money, and it is the one
-  directory with no authority row. `CLAUDE.md` is `george-only`.
-- **O-37 · `CLAUDE.md` says things that are no longer true.** Line 147: *"Nine checks run
-  on every push and block the merge"* — CI runs six (O-42). Section 4 routes on "the
-  global/regional seam" and "Folds, regions, the world map"; under D-051 those read
-  "global/shard seam" and "Folds, places, the world map". It also needs the `infra/` row
-  (O-36). `george-only`: Claude proposes the text, George applies it
+- **O-36 · resolved 24 Sep by D-068.** `infra/` is `claude-proposes` in `CLAUDE.md` section 6
+- **O-37 · resolved 24 Sep by D-068.** Section 9 states six checks in CI and three in the hook;
+  section 4 reads "global/shard seam" and "Folds, places"
 - **O-38 · `rules/` teaches retired vocabulary.** `LANGUAGE.rule.md` lists **region** as a
   game term (D-051 removes it). `NON-NEGOTIABLES.rule.md` says attribution is "by name and
   place" (D-056 makes it tag and place). `george-only`
-- **O-39 · `.claude/rules/` is out of date and cannot be written remotely.** `api-seam.md`
-  says `region_*` and lists submissions in `directory` (D-051, D-052); `nakama.md` says
-  "sharding on region"; `infra.md` rule 4 says EU only (D-043 is London). Apply from the
-  first Claude Code session
+- **O-39 · resolved 24 Sep by D-068.** `api-seam.md` (`shard_*`, no submissions, applies only
+  to a website Core API), `nakama.md` (adding shards; migrations route to the data model) and
+  `infra.md` rule 4 (EU or UK) updated. The remote tools cannot write under `.claude/`; George
+  placed the files (commit `d8e789d`)
 - **O-41 · Crash reporting — resolved 24 Sep by D-059.** Unity's built-in Diagnostics,
   Unity 6.2 or later
 - **O-42 · CI runs six of the eight checks.** `secrets`, `versions` and `naming` exist only
@@ -232,10 +226,8 @@ can currently confirm.
   list, or a check. `shard_gi.specimen_name.status` is ready for whichever
 - **O-63 · Who is credited when a creature is fed or kept.** D-058 gives every creature an
   artist and a creator. The proposed skeleton records both at the time of the feed
-- **O-64 · Routes and write authority for `services/` and `infra/`.** Extends O-36. The
-  proposed skeleton (`spec/DATA-MODEL.spec.md`) puts migrations and release files under
-  `services/nakama/` and Terraform under `infra/`; `CLAUDE.md` gives neither a row, so no
-  file can be written there. `george-only`
+- **O-64 · resolved 24 Sep by D-068.** `services/` and `infra/` are `claude-proposes`;
+  `services/nakama/migrations/` routes to `spec/DATA-MODEL.spec.md` through `nakama.md`
 - **O-65 · Play the skeleton does not model yet.** Things built on the land, where encounters
   sit on the map, weather, fair days, avatar pieces unlocked by play, where NPCs stand
 - **O-66 · Retention against D-066.** D-066 keeps every statistic for the website to copy;

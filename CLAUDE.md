@@ -71,8 +71,8 @@ exists — which is most of planning.
 | When the work is about | Read |
 |---|---|
 | Deciding anything, or calling something settled | `rules/DECISION-RULES.rule.md` · `state/DECISIONS.state.md` |
-| Schema, migrations, the global/regional seam | `spec/DATA-MODEL.spec.md` · `spec/PLACES.spec.md` |
-| Folds, regions, the world map | `spec/PLACES.spec.md` · `spec/PRODUCT.spec.md` |
+| Schema, migrations, the global/shard seam | `spec/DATA-MODEL.spec.md` · `spec/PLACES.spec.md` |
+| Folds, places, the world map | `spec/PLACES.spec.md` · `spec/PRODUCT.spec.md` |
 | Encounters, rarity, anything random | `spec/ENCOUNTERS.spec.md` · `rules/NON-NEGOTIABLES.rule.md` |
 | Submissions, screening, age verification | `spec/SCREENING.spec.md` · `rules/NON-NEGOTIABLES.rule.md` |
 | Any text a person reads — UI, copy, errors | `spec/BRAND.spec.md` · `spec/IDENTITY.spec.md` |
@@ -109,7 +109,7 @@ Declared per file as `authority:` frontmatter. A hook refuses the write; CI is t
 | Directory | Authority |
 |---|---|
 | `rules/` | `george-only` |
-| `spec/` · `ops/` | `claude-proposes` |
+| `spec/` · `ops/` · `infra/` · `services/` | `claude-proposes` |
 | `state/` · `checks/` · `hooks/` | `claude-writes` |
 
 ---
@@ -144,6 +144,6 @@ A rule you have had to repeat twice belongs one tier up.
 
 ## 9. CI
 
-Nine checks run on every push and block the merge. `checks/README.md` lists them and what
-each fails on. The orphan check is the one that matters: a contract file nothing routes to
-is unreachable after a compaction, not merely unread.
+Six checks run in CI on every push and block the merge; three more run only in the pre-push
+hook. `checks/README.md` lists them and what each fails on. The orphan check is the one that
+matters: a contract file nothing routes to is unreachable after a compaction, not merely unread.

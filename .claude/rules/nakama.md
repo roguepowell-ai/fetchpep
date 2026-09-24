@@ -5,7 +5,8 @@ paths: ["services/nakama/**"]
 
 # Nakama — realtime
 
-Routes to `spec/ENCOUNTERS.spec.md`. Does not restate it.
+Routes to `spec/ENCOUNTERS.spec.md`, and for `services/nakama/migrations/` to
+`spec/DATA-MODEL.spec.md`. Does not restate them.
 
 ## Server authority
 
@@ -30,5 +31,5 @@ stages are separate so a tier's contents can change without moving its probabili
 
 ## Scaling
 
-[certain] Open-source Nakama does not cluster. It scales vertically, then by sharding on
-region. Anything that assumes horizontal scale is wrong.
+[certain] Open-source Nakama does not cluster. It scales vertically, then by adding shards
+(D-051). Anything that assumes horizontal scale is wrong.
