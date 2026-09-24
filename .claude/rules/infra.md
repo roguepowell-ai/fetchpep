@@ -10,8 +10,10 @@ Routes to `ops/INFRA.ops.md` and `ops/COSTS.ops.md`. Does not restate them.
 ## Never
 
 - **`terraform apply` against production.** Plan only. The apply is a human action.
-- **Touch billing configuration or the kill switch.** The kill switch is the one control
-  that stops an unbounded loss, so it is the one thing an agent must not be able to modify.
+- **Touch billing configuration or the kill switch** — except its first version,
+  written once under D-070 for George to review. The kill switch is the one control that
+  stops an unbounded loss, so once it exists it is the one thing an agent must not be able
+  to modify.
 
 ## Rules
 

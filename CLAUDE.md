@@ -37,7 +37,7 @@ rule. Each is also enforced by a hook; this text exists so the refusal is compre
   scalar change with no `fileID:` or `guid:` on the line is the only permitted edit, and
   only when no Editor is reachable.
 - Never edit a file whose frontmatter says `authority: george-only`.
-- Never run `terraform apply` against production, and never touch billing configuration.
+- Never run `terraform apply` against production, and never touch billing configuration, except the kill switch's first version, written once under D-070.
 - Never claim work is done on the strength of your own account of it. See section 5.
 
 ---

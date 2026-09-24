@@ -53,7 +53,7 @@ dist/
 crash.log
 *.tfvars
 !*.tfvars.example
-.terraform.lock.hcl
+infra/**/.build/
 
 # ---- OS ----
 .DS_Store
