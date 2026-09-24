@@ -183,6 +183,11 @@ can currently confirm.
 - **O-42 · CI runs six of the eight checks.** `secrets`, `versions` and `naming` exist only
   in `.githooks/pre-push`, which has never run (O-35), so they gate nothing. Wiring them in
   is a workflow edit — execution-granting, so it cannot be written remotely
+- **O-46 · D-039 against reality.** D-039, George's, says the repo lives at `C:\dev\fetchpep`
+  and nothing goes in a cloud-synced folder. The working copy is under
+  `C:\Users\laure\OneDrive\Desktop\`, and on 24 Sep George said sync is off for it and the
+  note about it could go. Either D-039 is superseded (the current path stands) or the repo
+  moves before a Unity project exists. George's call; free now
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line

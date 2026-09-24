@@ -51,6 +51,7 @@ D-031 pilot ships free, D-032 revenue is web-side via Stripe only.
 | D-036 | Logic in plain C# classes, MonoBehaviour as a thin shell, assembly definition per feature | Claude-proposed, pending | **Open.** Sets the ceiling on verification speed |
 | D-037 | Enforcement is tiered: hooks block, CI catches, prose explains | Claude-proposed, pending | Written, not yet in effect |
 | D-038 | `CLAUDE.md` is a directory, not a rulebook. Capped at 150 lines, CI-enforced | Claude-proposed, George accepted | In effect |
+| D-039 | The repo and Unity project live at `C:\dev\fetchpep` on the build machine. Nothing to do with this project goes in a cloud-synced folder | George — recorded in the FetchPep Project, `claude/DECISIONS-2026-09-24.md`, never copied here | **Contradicted by reality — O-46.** The working copy is at `C:\Users\laure\OneDrive\Desktop\dev\github\fetchpep`; George says sync is off for that folder |
 | D-041 | *Deleted 24 Sep by George.* Its content was never recorded; the citation is removed from `ops/INFRA.ops.md`. Tombstone kept so the ID is not reused | George, 24 Sep | **Deleted** |
 | D-042 | **No Firebase for now.** FCM is added when push notifications are designed. Crash reporting goes to Unity's own tooling or Sentry — O-41 | George, 24 Sep | **Decided** |
 | D-043 | **London.** Google Cloud `europe-west2`; Neon `aws-eu-west-2`. Servers and database in one city | George, 24 Sep | **Decided.** `verify:` every location argument in `infra/` reads `europe-west2`; the Neon project reads `aws-eu-west-2` |
@@ -65,11 +66,11 @@ D-031 pilot ships free, D-032 revenue is web-side via Stripe only.
 | D-052 | **The website owns submissions, originals and screening.** Only the published creature enters the game's `directory.catalogue` | George, 24 Sep | **Decided** |
 | D-053 | **The place hierarchy** is `directory.place_kind`: world, continent, country, area, locality, custom, fold. Text in `spec/DATA-MODEL.spec.md` | George — his schema, from a screenshot, 24 Sep | **Decided** |
 
-**Numbering.** D-039 and D-040 were never assigned; the sequence goes 038 → 041. Found
-24 Sep while reconciling this file against every ID cited across the contract. Do not reuse
-the gap. D-041 to D-043 were cited in `ops/INFRA.ops.md` before being recorded here — the
-exact failure the note at the top of this file describes, repeated inside the same day it
-was written.
+**Numbering.** D-040 has no record in the repo or the Project; do not reuse it. D-039
+exists only in the Project and is copied above. An earlier version of this note said D-039
+was never assigned — the reconciliation had searched the repo and not the Project, which is
+the store-register rule broken by the note written to enforce it. D-041 to D-043 were cited
+in `ops/INFRA.ops.md` before being recorded here.
 
 **D-017** is cited in `ops/SCALING.ops.md` as the single-region pilot. Under D-051 it reads
 single-*shard* pilot. Same decision, corrected word; still unverified like the rest of
