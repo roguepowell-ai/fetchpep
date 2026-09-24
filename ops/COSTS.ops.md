@@ -37,8 +37,8 @@ WebSocket bills as active for as long as it is held. Cap it explicitly.
 
 ## Controls
 
-1. **Billing kill switch** — Pub/Sub to a Cloud Function that detaches billing. Built
-   before anything that costs money.
+1. **Billing kill switch** — Pub/Sub to a Cloud Function that detaches billing. Applied
+   before the game goes public; during the pilot, budget alerts are the only guard (D-072).
 2. Budget alerts email while the meter still runs. They are a warning, not a control.
 3. Spend limits set explicitly on every managed service at creation.
 4. `require_partition_filter = TRUE` on every partitioned BigQuery table.

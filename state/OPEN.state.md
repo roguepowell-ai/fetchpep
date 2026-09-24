@@ -151,6 +151,9 @@ Confirmed attached to both projects, 24 Sep. `ops/COSTS.ops.md` says the kill sw
 built before anything that can cost money. The only failure mode in this system with no
 ceiling currently has no control in front of it. It is Terraform resource number one — and
 it is behind O-31 and O-32, which is the actual reason this is urgent rather than tidy.
+**Update, 24 Sep:** D-072 moves the apply to before the game goes public. During the pilot
+the guard is George's existing budget alerts, which warn and do not stop spend. The code is
+PR #9. This item closes when the kill switch is applied before launch, not before the VM.
 
 **O-34 · Terraform CLI is extracted, not installed.**
 `terraform.exe` sits loose in `Downloads\terraform_1.16.4_windows_amd64\`. It is not on
