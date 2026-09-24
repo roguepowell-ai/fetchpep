@@ -99,18 +99,29 @@ by D-070 — the one time an agent writes the kill switch. Closes O-28 when appl
 applies in Cloud Shell with George signed in; a test budget notification in dry-run mode
 produces the "would detach" log line; then dry-run is switched off by George.
 
-**Status, 24 Sep:** built on branch `kill-switch-b001`, not applied. PR #9, opened by
-operations (the PR page reads *Open*). The first review returned *changes needed*; the
-fixes are the branch's second commit. Everything from a passing review onward is still to
-happen. Outputs from the developer's session:
+**Status, 24 Sep:** built on branch `kill-switch-b001`, not applied; per D-072, applied
+before the game goes public. PR #9, opened by operations (the PR page reads *Open*). The
+first review returned *changes needed*, fixed in `ada344a`; the second returned *pass with
+changes*, fixed in the commit that adds this paragraph. Merge is George's. Outputs from the
+developer's session:
 
 ```
 node --version                   v24.21.0
 git --version                    git version 2.55.0.windows.5
 git config core.hooksPath        .githooks
-terraform fmt -check -recursive  (no output) exit 0
-terraform validate               Success! The configuration is valid.  exit 0
 ```
+
+`terraform fmt -check -recursive` and `terraform validate` ran twice, each on a known tree:
+
+| Ran on | `fmt -check` | `validate` |
+|---|---|---|
+| `ada344a`, checked out with `infra/` equal to HEAD (`git diff --quiet HEAD -- infra`) | no output, exit 0 | `Success! The configuration is valid.` exit 0 |
+| The commit that adds this paragraph: `kill_switch.tf` blob `d85fb0c`, `versions.tf` blob `de0e78d`, `.terraform.lock.hcl` blob `f7fe153` | no output, exit 0 | `Success! The configuration is valid.` exit 0 |
+
+A commit cannot name its own hash, so the second row names the blobs. To check, the blob of
+`git rev-parse <commit>:infra/bootstrap/kill_switch.tf` must start `d85fb0c`, and likewise
+for the other two. `infra/` is unchanged between `ada344a` and `69c67b0` (George's merge of
+`main` and D-073/D-074), so the first row also covers `69c67b0`.
 
 `terraform` is `Downloads\terraform_1.16.4_windows_amd64\terraform.exe`, run in
 `infra/bootstrap/` after `terraform init -backend=false` (O-34).

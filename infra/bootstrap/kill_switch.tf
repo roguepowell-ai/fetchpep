@@ -357,8 +357,28 @@ output "function" {
 }
 
 output "topic" {
-  description = "Publish a test notification here to exercise the function."
+  description = <<-EOT
+    Publish a test notification here to exercise the function. The function ignores any
+    message that lacks all three of: budgetDisplayName "fetchpep-dev-kill"; a costAmount
+    above kill_amount; a costIntervalStart in the current month. The test_message output
+    has all three. Publish it with:
+      gcloud pubsub topics publish "$(terraform output -raw topic)" \
+        --message "$(terraform output -raw test_message)"
+    In dry run the function's logs then show "would detach billing" with couldDetach.
+  EOT
   value       = google_pubsub_topic.budget.id
+}
+
+# A message the function acts on: the kill budget, one unit over kill_amount, this month.
+# Rebuilt at every plan, so the month is always the current one.
+output "test_message" {
+  description = "A budget notification the function acts on. Publish it to the topic output."
+  value = jsonencode({
+    budgetDisplayName = local.kill_budget_name
+    costAmount        = var.kill_amount + 1
+    budgetAmount      = var.kill_amount
+    costIntervalStart = formatdate("YYYY-MM-01'T'00:00:00Z", plantimestamp())
+  })
 }
 
 output "dry_run" {
