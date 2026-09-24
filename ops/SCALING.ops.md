@@ -18,14 +18,14 @@ migration. The point is to notice, not to pre-build.
 
 | Measure | Threshold | Reopen | Why that number |
 |---|---|---|---|
-| Concurrent players in one region | **TBD** | D-017 single-region pilot | [certain] Open-source Nakama does not cluster. It scales vertically, then by sharding on region. The ceiling is one VM's |
+| Concurrent players in one shard | **TBD** | D-017 single-shard pilot | [certain] Open-source Nakama does not cluster. It scales vertically, then by adding shards. The ceiling is one VM's. Heroic Cloud changes this — O-44 |
 | Nakama VM CPU, sustained | 70% | D-017 | Vertical headroom gone before it is gone |
 | Monthly spend | £150 of the £200 ceiling | D-022 | Leaves a month to act rather than a week |
 | Cloud Run concurrent instances | 60% of the cap | — | The cap is the control; approaching it means the cap is wrong or traffic is |
 | Postgres size | 60% of the Neon plan | — | |
 | R2 Class B operations / month | **TBD** | — | Egress is free, reads are not. Atlas bundling is the lever |
 | Submissions / week | Exceeds what one person can screen | D-021 solo developer | The content pipeline is the bottleneck, not the servers |
-| Time to build one creature | Whatever O-1 measures | **Everything** | If this is four hours, the architecture is solving the wrong problem |
+| Time to build one creature | Whatever O-1 measures | D-045 | Sets how fast the website can supply the game with creatures |
 | BigQuery bytes scanned / month | **TBD** | — | A missing partition filter shows up here first |
 
 `TBD` means nobody has measured it yet, not that it does not matter. Fill each one the
@@ -33,17 +33,15 @@ first time there is a real number, not an estimate.
 
 ## The one that matters
 
-**Time to build one creature** is the only row whose answer changes the shape of the
-product rather than the size of a bill. It has been open since the first plan. Forty
-minutes is a business; four hours means the content pipeline *is* the product and the game
-is its side effect.
-
-Every other row on this page is downstream of it.
+**Time to build one creature** sets how fast the website can supply the game. Under D-045
+creature creation is a separate web experience, so this number no longer decides what the
+product is — but a game with too few creatures has too little to encounter. It has been
+open since the first plan.
 
 ## What not to do
 
 - **Do not build for the threshold before crossing it.** The seam in the schema exists so
-  a second region is possible, not so it is imminent. Premature sharding costs more than
+  a second shard is possible, not so it is imminent. Premature sharding costs more than
   late sharding.
 - **Do not raise a threshold to avoid the conversation.** If a number is consistently
   wrong, change it with a decision ID and a reason.

@@ -23,28 +23,26 @@ changed; the number is assigned at creation. Neither is a secret — the number 
 service account addresses and public API endpoints by design, which is why it is recorded
 here in a public repository.
 
-Codename not product name, per D-034. Two environments, per D-035. D-041 is cited here and
-recorded nowhere — see `state/DECISIONS.state.md`.
+Codename not product name, per D-034. Two environments, per D-035.
 
 **Billing: attached to both projects, 24 Sep.** The kill switch does not exist. See O-28.
 
-### Region
+### Region — D-043
 
-**Not chosen.** See D-043. Every resource that takes a location must be in the EU —
-`.claude/rules/infra.md` rule 4.
+**London.** Google Cloud `europe-west2` for every resource that takes a location; Neon
+`aws-eu-west-2`. [certain] Neon offers only two European regions, Frankfurt and London, both
+on AWS — so the database city fixes the server city, and London puts both in one place.
 
-**Proposed correction:** this file previously said D-043 waits on D-042 because Firebase
-brings Firestore. That premise does not match the stack. Firebase is in the plan for **FCM
-and Crashlytics only**; the record is Postgres on Neon. [certain] Firebase's own locations
-page lists the products that take a location — Firestore, Realtime Database, Cloud Storage,
-App Hosting, Analytics, SQL Connect, AI Logic — and FCM, Crashlytics and Authentication are
-not among them. So adding Firebase for push, crash reporting or sign-in fixes no region, and
-**D-043 can be decided now.**
+*Region* here means a cloud location and nothing else. The game has no regions (D-051).
 
-The trap is the other direction. [certain] A Firestore database's location cannot be
-changed once provisioned. Firestore is not in the plan, and it cannot hold the ledger —
-the append-only guarantee is a Postgres rule. If a Firebase setup flow offers to create a
-Firestore database, the answer is no, unless a decision says otherwise.
+`.claude/rules/infra.md` rule 4 still says **EU regions**. London is not in the EU, so that
+rule must read **EU or UK** before any Terraform is written. [certain] Gibraltar-to-UK
+transfers need no extra safeguards since 15 July 2026 — see `spec/PRIVACY.spec.md`. The
+rule file cannot be written remotely; O-39.
+
+No Firebase for now (D-042), so nothing in the stack locks a location except what Terraform
+creates. [certain] A Firestore database's location cannot be changed once provisioned — if a
+later Firebase setup offers to create one, the answer is no without a decision.
 
 ### Other
 
@@ -52,6 +50,7 @@ Firestore database, the answer is no, unless a decision says otherwise.
 |---|---|
 | GitHub | `roguepowell-ai/fetchpep`, **public**. Ruleset on `main` binding: `contract` shows **Required** on PRs. Secret scanning and push protection on |
 | HCP Terraform | Organisation `fetchpep` exists. **No VCS provider connected, no workspace.** See O-31, O-29 |
+| Heroic Cloud | Account created by George, 24 Sep — org `fetchpep-studio`, title `inkfold`. Contents not checked. Whether Nakama is hosted here or self-hosted is **not decided** — O-44 |
 | Cloudflare, Neon, Stripe | Not created |
 | Apple, Google Play | Not created |
 

@@ -51,15 +51,29 @@ D-031 pilot ships free, D-032 revenue is web-side via Stripe only.
 | D-036 | Logic in plain C# classes, MonoBehaviour as a thin shell, assembly definition per feature | Claude-proposed, pending | **Open.** Sets the ceiling on verification speed |
 | D-037 | Enforcement is tiered: hooks block, CI catches, prose explains | Claude-proposed, pending | Written, not yet in effect |
 | D-038 | `CLAUDE.md` is a directory, not a rulebook. Capped at 150 lines, CI-enforced | Claude-proposed, George accepted | In effect |
-| D-041 | **Unknown.** Cited in `ops/INFRA.ops.md` beside D-035. No record of its content exists in any store | — | **Unrecorded citation.** George states what it is, or it is deleted from `INFRA.ops.md` |
-| D-042 | Is Firebase in the stack, and for which products | — | **Open.** The stack as specced uses it for FCM and Crashlytics only |
-| D-043 | GCP region for every resource that takes a location. EU only | — | **Open.** Does not depend on D-042 unless Firestore is adopted — see `ops/INFRA.ops.md` |
+| D-041 | *Deleted 24 Sep by George.* Its content was never recorded; the citation is removed from `ops/INFRA.ops.md`. Tombstone kept so the ID is not reused | George, 24 Sep | **Deleted** |
+| D-042 | **No Firebase for now.** FCM is added when push notifications are designed. Crash reporting goes to Unity's own tooling or Sentry — O-41 | George, 24 Sep | **Decided** |
+| D-043 | **London.** Google Cloud `europe-west2`; Neon `aws-eu-west-2`. Servers and database in one city | George, 24 Sep | **Decided.** `verify:` every location argument in `infra/` reads `europe-west2`; the Neon project reads `aws-eu-west-2` |
+| D-044 | **Erasure by crypto-shredding.** Resolves O-22. Personal fields are encrypted under a per-person key; erasure destroys the key | George, 24 Sep | **Decided.** Key location proposed in `spec/PRIVACY.spec.md` |
+| D-045 | **The game's core is exploring and encounters.** Creature creation is a separate web experience outside the app | George, 24 Sep | **Decided** |
+| D-046 | **Separate accounts.** Web and game do not share sign-in. A creature crosses into the game once, by a one-way publish, and becomes a permanent fixture | George, 24 Sep | **Decided** |
+| D-047 | **Game sign-in is Nakama's own** — Apple, Game Center, Google Play Games, device | George, 24 Sep | **Decided** |
+| D-048 | **Makers are credited by a tag, never a real name.** Tags may be auto-generated. The creature and its tag stay after an erasure request | George, 24 Sep | **Decided.** Legal check owed under O-24 |
+| D-049 | **Bundle identifier `art.inkfold.game`.** Resolves O-13. Permanent from first upload | George, 24 Sep | **Decided** |
+| D-050 | **Screening rejects any drawing showing a name or signature** and asks the maker to resubmit | George, 24 Sep | **Decided** |
+| D-051 | **"Region" is not a game term.** Map areas use the `place_kind` names (D-053). The shared-player instance is a **shard** in code, schemas `shard_*`. In this repo *region* means a cloud location and nothing else. Resolves Q43 / O-2 | George, 24 Sep | **Decided** |
+| D-052 | **The website owns submissions, originals and screening.** Only the published creature enters the game's `directory.catalogue` | George, 24 Sep | **Decided** |
+| D-053 | **The place hierarchy** is `directory.place_kind`: world, continent, country, area, locality, custom, fold. Text in `spec/DATA-MODEL.spec.md` | George — his schema, from a screenshot, 24 Sep | **Decided** |
 
 **Numbering.** D-039 and D-040 were never assigned; the sequence goes 038 → 041. Found
 24 Sep while reconciling this file against every ID cited across the contract. Do not reuse
 the gap. D-041 to D-043 were cited in `ops/INFRA.ops.md` before being recorded here — the
 exact failure the note at the top of this file describes, repeated inside the same day it
 was written.
+
+**D-017** is cited in `ops/SCALING.ops.md` as the single-region pilot. Under D-051 it reads
+single-*shard* pilot. Same decision, corrected word; still unverified like the rest of
+section 2.
 
 ## Format
 
