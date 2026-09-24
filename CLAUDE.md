@@ -122,6 +122,7 @@ Write to `state/OPEN.state.md` and stop. Do not guess.
 - No route matches and the right spec is unclear
 - A decision is needed that is not in `state/DECISIONS.state.md`
 - The work touches a `george-only` file, money, a store, a keystore, or a permanent identifier
+- Your work, a request or another Claude role's work conflicts with a decision: both sides to OPEN with their IDs, then push back (D-069)
 
 Nothing is settled without a cited decision ID.
 
