@@ -46,11 +46,20 @@ D-031 pilot ships free, D-032 revenue is web-side via Stripe only.
 
 | ID | Decision | Source | Status |
 |---|---|---|---|
-| D-033 | Unity 6 LTS + C# supersedes Godot 4 + GDScript | George, after research | Agreed, Godot entry owed to `SUPERSEDED.state.md` |
-| D-035 | Number of deployed backend environments: one, or dev plus prod | — | **Open.** Must precede any infrastructure |
+| D-033 | Unity 6 LTS + C# supersedes Godot 4 + GDScript | George, after research | Agreed. Godot entry is in `SUPERSEDED.state.md` |
+| D-035 | Two deployed backend environments: dev and prod, one GCP project each | George, 24 Sep — created `fetchpep-dev` and `fetchpep-prod` | **Resolved.** `verify:` both project IDs resolve in the Cloud console project picker |
 | D-036 | Logic in plain C# classes, MonoBehaviour as a thin shell, assembly definition per feature | Claude-proposed, pending | **Open.** Sets the ceiling on verification speed |
 | D-037 | Enforcement is tiered: hooks block, CI catches, prose explains | Claude-proposed, pending | Written, not yet in effect |
 | D-038 | `CLAUDE.md` is a directory, not a rulebook. Capped at 150 lines, CI-enforced | Claude-proposed, George accepted | In effect |
+| D-041 | **Unknown.** Cited in `ops/INFRA.ops.md` beside D-035. No record of its content exists in any store | — | **Unrecorded citation.** George states what it is, or it is deleted from `INFRA.ops.md` |
+| D-042 | Is Firebase in the stack, and for which products | — | **Open.** The stack as specced uses it for FCM and Crashlytics only |
+| D-043 | GCP region for every resource that takes a location. EU only | — | **Open.** Does not depend on D-042 unless Firestore is adopted — see `ops/INFRA.ops.md` |
+
+**Numbering.** D-039 and D-040 were never assigned; the sequence goes 038 → 041. Found
+24 Sep while reconciling this file against every ID cited across the contract. Do not reuse
+the gap. D-041 to D-043 were cited in `ops/INFRA.ops.md` before being recorded here — the
+exact failure the note at the top of this file describes, repeated inside the same day it
+was written.
 
 ## Format
 
