@@ -67,6 +67,36 @@ log for 24 Sep.
   parent is not recorded. `ltree` needs exactly one
 - **O-3 · D-035 — resolved 24 Sep.** Two environments, two GCP projects, both created
 
+## Brief B-001 — for the developer: the billing kill switch
+
+From the project manager, 24 Sep. Developer: Claude Code on George's PC (D-069). Authorised
+by D-070 — the one time an agent writes the kill switch. Closes O-28 when applied.
+
+1. **Set up the seat.** Run `node --version`, `git --version` and
+   `git config core.hooksPath .githooks` (closes O-35). Paste all three outputs in the PR.
+   Then, in `.claude/rules/infra.md` under *Never*, replace the kill-switch bullet with
+   (D-070): "**Touch billing configuration or the kill switch** — except its first version,
+   written once under D-070 for George to review. The kill switch is the one control that
+   stops an unbounded loss, so once it exists it is the one thing an agent must not be able
+   to modify."
+2. **Write `infra/bootstrap/`** (D-064; file names in `spec/DATA-MODEL.spec.md`,
+   *Files and names*): a Cloud Billing budget on the account attached to `fetchpep-dev`,
+   notifying a Pub/Sub topic; a function subscribed to it that detaches billing from
+   `fetchpep-dev` when actual cost passes the budget. Every location `europe-west2` (D-043);
+   names use the codename. Least privilege for the function's service account
+3. **Leave the money to George.** The budget amount and the billing account id are required
+   variables with no default. The PR asks George for the amount. No secret in any file
+4. **A dry-run switch.** The function takes a setting that logs "would detach" instead of
+   detaching, so the first test cannot switch billing off
+5. **Pin versions** (`ops/VERSIONS.ops.md`, rule 1): exact provider versions, commit
+   `.terraform.lock.hcl`, fill the Terraform row. Run `terraform fmt -check` and
+   `terraform validate` (the extracted binary in Downloads until O-34 closes)
+6. **Open a PR. Never apply** (D-067). Anything here you disagree with: D-069 — stop, push back
+
+**Proven when:** the reviewer passes the PR against this brief; George merges; operations
+applies in Cloud Shell with George signed in; a test budget notification in dry-run mode
+produces the "would detach" log line; then dry-run is switched off by George.
+
 ## Blocking any infrastructure at all
 
 Ordered. Nothing below moves until the item above it does.
@@ -128,11 +158,11 @@ can currently confirm.
 
 ## Blocking the first build
 
-- **O-20 · Claude Code on the Windows PC.** The build seat. Nothing in Phases 1 to 4 is
-  reachable without it. Still never opened on the repo as of 24 Sep.
-- **O-43 · Is Node on the PC's `PATH`?** Never checked. `.claude/settings.json` runs
-  `node hooks/guard-write.mjs` for every write; without Node the whole blocked tier does
-  nothing. Check the moment Claude Code opens
+- **O-20 · Claude Code on the Windows PC — seat decided 24 Sep by D-069.** The Claude desktop
+  app on George's PC, in the repo folder. Closes when the first session reports
+  `node --version` and `git --version` (brief B-001, step 1)
+- **O-43 · Node on the PC — installed 24 Sep** (`C:\Program Files\nodejs`), with Git for Windows.
+  Closes when a Claude Code session shows `node --version`: the write hook depends on it
 - **O-44 · resolved 24 Sep by D-055.** Nakama on a VM in London for the pilot. The Heroic
   Cloud account George created (org `fetchpep-studio`, title `inkfold`) stays unused —
   D-060, O-49
