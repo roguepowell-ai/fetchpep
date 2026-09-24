@@ -163,15 +163,16 @@ it is not the bootstrap D-064 describes. Before the first plan, George sets Work
 Settings → General → Execution mode to **Local**. Also: O-57, because the state carries the
 billing account id.
 
-**O-68 · The kill switch depends on the Functions Framework — needs a decision ID
-(R-SEC-04).** The PR #9 review asked for it to be pinned (VERSIONS rule 1).
+**O-68 · The kill switch depends on the Functions Framework — resolved 24 Sep by D-073
+(pin 5.0.5).** The PR #9 review asked for it to be pinned (VERSIONS rule 1).
 `@google-cloud/functions-framework` `5.0.5` is now declared exactly, with a committed
 `package-lock.json` of 128 packages. R-SEC-04 makes a new dependency on a money path a
 decision. It is not new in substance: without the declaration, the platform installs the
 framework itself, at a version nobody chose. Developer's position: pin it. George confirms
 with an ID, or rules otherwise, before PR #9 merges.
 
-**O-69 · `CLAUDE.md` section 2 has no D-070 exception.** It reads "never touch billing
+**O-69 · `CLAUDE.md` section 2 has no D-070 exception — resolved 24 Sep by D-074, wording
+applied.** It reads "never touch billing
 configuration" without qualification, while `.claude/rules/infra.md` now carries the D-070
 exception. Raised by the PR #9 review. Section 2 is the hard-stops list and George's to
 word. Proposed: append "— except the kill switch's first version, written once under
