@@ -181,13 +181,10 @@ can currently confirm.
 - **O-38 · `rules/` teaches retired vocabulary.** `LANGUAGE.rule.md` lists **region** as a
   game term (D-051 removes it). `NON-NEGOTIABLES.rule.md` says attribution is "by name and
   place" (D-056 makes it tag and place). `george-only`
-- **O-39 · `.claude/rules/` is out of date — edits approved (D-068), not yet applied.** The
-  remote tools refuse to write under `.claude/` (confirmed 24 Sep: "Writing to .claude is not
-  permitted via remote tools"). The replacement text for `api-seam.md` (`shard_*`, no
-  submissions, applies only to a website Core API), `nakama.md` (adding shards; migrations
-  route to the data model) and `infra.md` rule 4 (EU or UK) is in the FetchPep Project,
-  `claude/CLAUDE-md-proposed-changes.md`. George pastes it, or the first Claude Code session
-  on the PC applies it
+- **O-39 · resolved 24 Sep by D-068.** `api-seam.md` (`shard_*`, no submissions, applies only
+  to a website Core API), `nakama.md` (adding shards; migrations route to the data model) and
+  `infra.md` rule 4 (EU or UK) updated. The remote tools cannot write under `.claude/`; George
+  placed the files (commit `d8e789d`)
 - **O-41 · Crash reporting — resolved 24 Sep by D-059.** Unity's built-in Diagnostics,
   Unity 6.2 or later
 - **O-42 · CI runs six of the eight checks.** `secrets`, `versions` and `naming` exist only
@@ -229,9 +226,8 @@ can currently confirm.
   list, or a check. `shard_gi.specimen_name.status` is ready for whichever
 - **O-63 · Who is credited when a creature is fed or kept.** D-058 gives every creature an
   artist and a creator. The proposed skeleton records both at the time of the feed
-- **O-64 · resolved 24 Sep by D-068.** `services/` and `infra/` are `claude-proposes`. The
-  route from `services/nakama/migrations/` to `spec/DATA-MODEL.spec.md` waits on `nakama.md`
-  (O-39)
+- **O-64 · resolved 24 Sep by D-068.** `services/` and `infra/` are `claude-proposes`;
+  `services/nakama/migrations/` routes to `spec/DATA-MODEL.spec.md` through `nakama.md`
 - **O-65 · Play the skeleton does not model yet.** Things built on the land, where encounters
   sit on the map, weather, fair days, avatar pieces unlocked by play, where NPCs stand
 - **O-66 · Retention against D-066.** D-066 keeps every statistic for the website to copy;
