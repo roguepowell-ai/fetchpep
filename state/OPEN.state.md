@@ -73,7 +73,12 @@ From the project manager, 24 Sep. Developer: Claude Code on George's PC (D-069).
 by D-070 — the one time an agent writes the kill switch. Closes O-28 when applied.
 
 1. **Set up the seat.** Run `node --version`, `git --version` and
-   `git config core.hooksPath .githooks` (closes O-35). Paste all three outputs in the PR
+   `git config core.hooksPath .githooks` (closes O-35). Paste all three outputs in the PR.
+   Then, in `.claude/rules/infra.md` under *Never*, replace the kill-switch bullet with
+   (D-070): "**Touch billing configuration or the kill switch** — except its first version,
+   written once under D-070 for George to review. The kill switch is the one control that
+   stops an unbounded loss, so once it exists it is the one thing an agent must not be able
+   to modify."
 2. **Write `infra/bootstrap/`** (D-064; file names in `spec/DATA-MODEL.spec.md`,
    *Files and names*): a Cloud Billing budget on the account attached to `fetchpep-dev`,
    notifying a Pub/Sub topic; a function subscribed to it that detaches billing from
