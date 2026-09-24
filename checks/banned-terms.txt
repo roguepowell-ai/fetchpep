@@ -1,0 +1,12 @@
+# Terms that must not appear outside this file and rules/LANGUAGE.rule.md.
+# One per line. Lines starting with # are comments.
+# A line may be exempted with a trailing:  <!-- allow-term: why -->
+#
+# PARTIAL — reconstructed from session evidence. Confirm against the decision
+# log before relying on it. One term was removed as too common in ordinary
+# English to grep for; do not re-add it without reading that decision.
+child
+children
+homestead
+streak
+stamina

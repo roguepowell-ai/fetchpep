@@ -1,0 +1,22 @@
+name: contract
+on: [push, pull_request]
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: router size
+        run: bash checks/router-size.check.sh
+      - name: router links
+        run: bash checks/router-links.check.sh
+      - name: router orphans
+        run: bash checks/router-orphans.check.sh
+      - name: frontmatter
+        run: bash checks/frontmatter.check.sh
+      - name: banned terms
+        run: bash checks/banned-terms.check.sh
+      - name: write authority
+        run: bash checks/authority.check.sh "origin/${{ github.base_ref || 'main' }}"
