@@ -71,24 +71,27 @@ log for 24 Sep.
 
 Ordered. Nothing below moves until the item above it does.
 
-**O-50 to O-53 · The game stack has four gaps with no decision.** Each needs an ID before
-any `.tf` file is written. Claude's recommendation is in brackets; George said "no
-preference" on 51 to 53 on 24 Sep, which is not yet a decision.
+- **O-50 to O-53 · resolved 24 Sep by D-062 to D-065.** Game logic in Nakama; PostgreSQL
+  on the VM; HCP Terraform with one Cloud Shell bootstrap; Cloudflare Tunnel and R2
 
-- **O-50 · Where game logic runs.** TypeScript modules inside open-source Nakama, or a
-  separate Core API. [Inside Nakama: one server to run and pay for.] Open-source Nakama
-  supports TypeScript, Lua and Go runtime modules — heroiclabs/nakama README
-- **O-51 · Where Nakama's database lives.** D-057 chose Neon for a Core API that O-50 may
-  remove. [PostgreSQL 16 on the same VM, disk snapshots in Terraform.] Neon or Cloud SQL
-  in London are the alternatives
-- **O-52 · Where Terraform runs and keeps state.** [HCP Terraform for state and runs; one
-  bootstrap run from Google Cloud Shell for the trust setup and the kill switch — the
-  exception proposed in `ops/INFRA.ops.md`.] The alternative is Cloud Shell only, with state
-  in a Cloud Storage bucket
-- **O-53 · How phones reach the server, and where sprites live.** Port 7350 needs a
-  hostname and TLS; only `art.inkfold.game` exists as an identifier (D-049). [Cloudflare
-  Tunnel — no inbound ports on the VM — and sprites on Cloudflare R2.] Caddy on the VM, or
-  Google-only, are the alternatives
+**O-54 · Nakama's own tables, or ours.** D-063 puts one PostgreSQL on the VM. Nakama
+creates and migrates its own tables; the seam (D-051) and the append-only ledger need real
+SQL tables. Proposed: Nakama's tables for accounts and sign-in only; `directory` and
+`shard_gi` for all game data, written from the TypeScript modules. Verify how the
+TypeScript runtime reaches SQL before relying on it.
+
+**O-55 · How game identity gets into the game.** `spec/DATA-MODEL.spec.md` puts game
+identity in `directory`; Nakama keeps its own accounts. D-054 gives every steward and
+member a login; the steward is age-checked on the website; D-066 says nothing live between
+them. Options: through the publish door in batches, or a sign-in both sides share. With O-47.
+
+**O-56 · A fold on both sides of the seam.** A fold is the leaf of the place tree in
+`directory.place` (D-053), and `spec/DATA-MODEL.spec.md` also puts folds in `shard_*`. No
+joins across the seam (D-051), so one is the record and the other refers to it by ID only.
+
+**O-58 · The game API's hostname.** D-065 needs a hostname on a domain whose DNS is on
+Cloudflare. Only `art.inkfold.game` exists, and that is a bundle identifier (D-049), not a
+domain anyone owns yet.
 
 **O-31 · HCP Terraform has no VCS provider.**
 Checked 24 Sep at `app.terraform.io/app/fetchpep/settings/version-control` — *"There are no
@@ -211,6 +214,12 @@ can currently confirm.
   pages; no plan was started. An unused account with a card is a cost risk until closed.
   George removes the card or closes the account. **Evidence to close:** the billing page
   showing no plan and no card
+- **O-57 · Data held outside the UK and EU.** `spec/PRIVACY.spec.md` says data stays in the
+  UK or EU. Unchecked: where Unity Diagnostics keeps crash reports (D-059) and where HCP
+  Terraform keeps state (D-064). R2 gets EU jurisdiction at creation (D-065)
+- **O-59 · PRIVACY's reason for keys in Cloud KMS cites Neon.** It says Neon's restorable
+  history would bring a deleted key back. Under D-063 the VM's disk snapshots do the same, so
+  the conclusion holds and the reason needs rewording. `claude-proposes`
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line
