@@ -220,6 +220,27 @@ can currently confirm.
 - **O-59 · PRIVACY's reason for keys in Cloud KMS cites Neon.** It says Neon's restorable
   history would bring a deleted key back. Under D-063 the VM's disk snapshots do the same, so
   the conclusion holds and the reason needs rewording. `claude-proposes`
+- **O-60 · Steward controls into the game, reports out.** The visitor lock, fold membership,
+  blocks and phone pairing are set on the website; a report filed in the game must reach a
+  person. D-066 says nothing live between them, and a release batch is too slow for a lock.
+  Proposed: a second server-to-server door, `apply_control`, logged in `directory.door_log`.
+  Needs a decision, because it is a live call from the website into the game
+- **O-61 · Sign-in: the picker or a login.** D-054 gives every member a login; the App
+  Shell's "Who's playing" picker assumes members have none (O-48, O-47)
+- **O-62 · Specimen names are free text.** The only text a member types that others might
+  see. No moderation path exists in the game. Options: names private to the fold, a word
+  list, or a check. `shard_gi.specimen_name.status` is ready for whichever
+- **O-63 · Who is credited when a creature is fed or kept.** D-058 gives every creature an
+  artist and a creator. The proposed skeleton records both at the time of the feed
+- **O-64 · Routes and write authority for `services/` and `infra/`.** Extends O-36. The
+  proposed skeleton (`spec/DATA-MODEL.spec.md`) puts migrations and release files under
+  `services/nakama/` and Terraform under `infra/`; `CLAUDE.md` gives neither a row, so no
+  file can be written there. `george-only`
+- **O-65 · Play the skeleton does not model yet.** Things built on the land, where encounters
+  sit on the map, weather, fair days, avatar pieces unlocked by play, where NPCs stand
+- **O-66 · Retention against D-066.** D-066 keeps every statistic for the website to copy;
+  `spec/PRIVACY.spec.md` proposes aggregating raw gameplay events after 90 days. Reconcile
+  before the first real player
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line
