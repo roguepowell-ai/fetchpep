@@ -33,6 +33,20 @@ re-read and re-injected.
 **`secrets.check.sh`** — [certain] a secret in git history is permanent. Rotation is the
 only remedy. This check is the backstop; `hooks/guard-write.mjs` is the control.
 
+## Where else these run
+
+`.githooks/pre-push` runs the same eight checks before a push leaves the machine, and
+refuses it on any failure. Enable once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+It is not a server-side gate — `--no-verify` bypasses it and a fresh clone does not have it
+until that config is set. It earns its place on **latency**: it fails in seconds rather than
+after a push, a CI queue and a round trip. For an agent working in a loop that is the
+difference between a tight loop and a slow one.
+
 ## Writing a new check
 
 1. **Whole words, not substrings.** `banned-terms` once failed on `Get-ChildItem` because
