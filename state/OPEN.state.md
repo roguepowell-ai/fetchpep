@@ -9,19 +9,9 @@ the evidence, until they are moved to `state/SESSION-LOG.state.md`.
 
 ## Blocking everything
 
-**O-1 · Build one creature by hand and time it.**
-Top of the list since the first plan. Needs a sprite editor and an afternoon — no toolchain,
-no accounts, no device. It is the only number that says whether the product works at any
-scale. Forty minutes is a business. Four hours means the content pipeline is the product
-and much of the specified architecture is solving the wrong bottleneck.
-
-Untouched on 24 Sep while the repo, CI, ruleset, secret protection, two GCP projects and an
-HCP Terraform organisation were all stood up. Every one of those is reversible in an
-afternoon. O-1 is the only item that can invalidate the architecture, and it is the only
-one nobody has started.
-
 **O-18 · The specs do not exist.**
-`spec/` holds eight placeholders. Product, identity, brand, design, data model, places,
+`spec/` holds eight placeholders; `PRODUCT`, `DATA-MODEL` and `PLACES` became partly written
+on 24 Sep from George's decisions and his `place_kind` schema. Product, identity, brand, design, data model, places,
 encounters and screening were worked out in conversation and were never written to any
 store. They are not recoverable from a file. Each has to be written from scratch or
 re-decided.
@@ -33,15 +23,25 @@ citing nothing.
 
 ## Blocking the schema
 
-**O-22 · Erasure versus the immutable ledger.**
-The ledger is append-only by database rule. Gibraltar GDPR includes a right to erasure.
-These conflict. `spec/PRIVACY.spec.md` proposes the standard resolution — the ledger holds
-an opaque subject id, the mapping to a person lives once in `directory`, and erasure severs
-the mapping — but it is **proposed, not decided**, and it has to be in the first migration.
-It cannot be retrofitted, because retrofitting means rewriting an append-only table.
+- **O-22 · Erasure versus the immutable ledger — resolved 24 Sep by D-044**, crypto-shredding.
+  Key location proposed in `spec/PRIVACY.spec.md`: Cloud KMS, because Neon's restorable
+  history would bring a deleted key back.
 
 **O-24 · Lawful basis.**
-Not settled and not Claude's to settle. Needed before any personal data is collected.
+Not settled and not Claude's to settle. Needed before any personal data is collected. The
+same conversation with a lawyer should cover D-056 — whether a creature may stay after its
+maker asks to be erased — and whether a **self-chosen** tag, which can identify its maker,
+is allowed at all.
+
+**O-40 · Website: the original photograph.** For the website's own spec, not the game's.
+D-025 keeps each submitted original untouched; George's 26 Aug data model stores it "EXIF
+stripped, auto-cropped before write". One has to give.
+
+## Blocking launch content
+
+**O-1 · Build one creature by hand and time it.** *Reframed 24 Sep by D-058.*
+The pilot's creatures are seeded, built by hand by Joshua. How long one takes sets how many
+creatures the pilot world can hold. Needs a sprite editor and an afternoon.
 
 ## Blocking nothing yet, but cheap now
 
@@ -61,13 +61,37 @@ log for 24 Sep.
 
 ## Blocking the world map
 
-- **O-2 · Q43 — does infrastructure say `region` or `shard`?** Free today, expensive once
-  Terraform and the schema exist.
+- **O-2 · Q43 — resolved 24 Sep by D-051.** The game has no regions. The shared instance is
+  a shard, schemas `shard_*`; *region* means a cloud location only
+- **O-45 · Where does a `custom` map sit in the place tree?** D-053 lists the kind; its
+  parent is not recorded. `ltree` needs exactly one
 - **O-3 · D-035 — resolved 24 Sep.** Two environments, two GCP projects, both created
 
 ## Blocking any infrastructure at all
 
 Ordered. Nothing below moves until the item above it does.
+
+- **O-50 to O-53 · resolved 24 Sep by D-062 to D-065.** Game logic in Nakama; PostgreSQL
+  on the VM; HCP Terraform with one Cloud Shell bootstrap; Cloudflare Tunnel and R2
+
+**O-54 · Nakama's own tables, or ours.** D-063 puts one PostgreSQL on the VM. Nakama
+creates and migrates its own tables; the seam (D-051) and the append-only ledger need real
+SQL tables. Proposed: Nakama's tables for accounts and sign-in only; `directory` and
+`shard_gi` for all game data, written from the TypeScript modules. Verify how the
+TypeScript runtime reaches SQL before relying on it.
+
+**O-55 · How game identity gets into the game.** `spec/DATA-MODEL.spec.md` puts game
+identity in `directory`; Nakama keeps its own accounts. D-054 gives every steward and
+member a login; the steward is age-checked on the website; D-066 says nothing live between
+them. Options: through the publish door in batches, or a sign-in both sides share. With O-47.
+
+**O-56 · A fold on both sides of the seam.** A fold is the leaf of the place tree in
+`directory.place` (D-053), and `spec/DATA-MODEL.spec.md` also puts folds in `shard_*`. No
+joins across the seam (D-051), so one is the record and the other refers to it by ID only.
+
+**O-58 · The game API's hostname.** D-065 needs a hostname on a domain whose DNS is on
+Cloudflare. Only `art.inkfold.game` exists, and that is a bundle identifier (D-049), not a
+domain anyone owns yet.
 
 **O-31 · HCP Terraform has no VCS provider.**
 Checked 24 Sep at `app.terraform.io/app/fetchpep/settings/version-control` — *"There are no
@@ -106,6 +130,12 @@ can currently confirm.
 
 - **O-20 · Claude Code on the Windows PC.** The build seat. Nothing in Phases 1 to 4 is
   reachable without it. Still never opened on the repo as of 24 Sep.
+- **O-43 · Is Node on the PC's `PATH`?** Never checked. `.claude/settings.json` runs
+  `node hooks/guard-write.mjs` for every write; without Node the whole blocked tier does
+  nothing. Check the moment Claude Code opens
+- **O-44 · resolved 24 Sep by D-055.** Nakama on a VM in London for the pilot. The Heroic
+  Cloud account George created (org `fetchpep-studio`, title `inkfold`) stays unused —
+  D-060, O-49
 - **O-4 · Is there an iPhone?** Without one the TestFlight gate is unreachable.
 - **O-5 · Android test device.** Not bought. Physical supply chain plus a customs question.
 - **O-6 · Apple Developer enrolment.** Failed once on a restricted network, cause unknown.
@@ -121,7 +151,7 @@ can currently confirm.
 
 ## Permanent from first upload
 
-- **O-13** · Bundle identifier. Proposed `art.inkfold.game`. Cannot be changed
+- **O-13 · resolved 24 Sep by D-049.** `art.inkfold.game`
 - **O-14** · Keystore and certificate backup policy. Two backups, one offline, day one
 
 ## Housekeeping
@@ -149,6 +179,47 @@ can currently confirm.
   `spec/`, `ops/`, `state/`, `checks/` and `hooks/`. It does not list `infra/`. Terraform is
   the one directory in this repo where a Claude write can spend money, and it is the one
   directory with no authority row. `CLAUDE.md` is `george-only`.
+- **O-37 · `CLAUDE.md` says things that are no longer true.** Line 147: *"Nine checks run
+  on every push and block the merge"* — CI runs six (O-42). Section 4 routes on "the
+  global/regional seam" and "Folds, regions, the world map"; under D-051 those read
+  "global/shard seam" and "Folds, places, the world map". It also needs the `infra/` row
+  (O-36). `george-only`: Claude proposes the text, George applies it
+- **O-38 · `rules/` teaches retired vocabulary.** `LANGUAGE.rule.md` lists **region** as a
+  game term (D-051 removes it). `NON-NEGOTIABLES.rule.md` says attribution is "by name and
+  place" (D-056 makes it tag and place). `george-only`
+- **O-39 · `.claude/rules/` is out of date and cannot be written remotely.** `api-seam.md`
+  says `region_*` and lists submissions in `directory` (D-051, D-052); `nakama.md` says
+  "sharding on region"; `infra.md` rule 4 says EU only (D-043 is London). Apply from the
+  first Claude Code session
+- **O-41 · Crash reporting — resolved 24 Sep by D-059.** Unity's built-in Diagnostics,
+  Unity 6.2 or later
+- **O-42 · CI runs six of the eight checks.** `secrets`, `versions` and `naming` exist only
+  in `.githooks/pre-push`, which has never run (O-35), so they gate nothing. Wiring them in
+  is a workflow edit — execution-granting, so it cannot be written remotely
+- **O-46 · D-039 against reality.** D-039, George's, says the repo lives at `C:\dev\fetchpep`
+  and nothing goes in a cloud-synced folder. The working copy is under
+  `C:\Users\laure\OneDrive\Desktop\`, and on 24 Sep George said sync is off for it and the
+  note about it could go. Either D-039 is superseded (the current path stands) or the repo
+  moves before a Unity project exists. George's call; free now
+- **O-47 · Sign-in methods.** D-054 says the steward and every member have their own login.
+  Which method each uses is open: the 26 Aug data model says Apple or Google for both; the
+  design boards show the steward on email and password and members picking their name on a
+  shared phone
+- **O-48 · The design boards predate today's decisions.** The Atlas board says "Region —
+  Cornwall" and the design system README lists *region* as vocabulary (D-051 retires it); the
+  App Shell's "Who's playing" picker assumes members have no login (D-054 gives them one).
+  The boards live in the Inkfold design system, which is George's to edit
+- **O-49 · The Heroic Cloud account holds a payment card and is not in the stack.** On 24
+  Sep George added card details after Heroic Labs' documentation links led to its sign-up
+  pages; no plan was started. An unused account with a card is a cost risk until closed.
+  George removes the card or closes the account. **Evidence to close:** the billing page
+  showing no plan and no card
+- **O-57 · Data held outside the UK and EU.** `spec/PRIVACY.spec.md` says data stays in the
+  UK or EU. Unchecked: where Unity Diagnostics keeps crash reports (D-059) and where HCP
+  Terraform keeps state (D-064). R2 gets EU jurisdiction at creation (D-065)
+- **O-59 · PRIVACY's reason for keys in Cloud KMS cites Neon.** It says Neon's restorable
+  history would bring a deleted key back. Under D-063 the VM's disk snapshots do the same, so
+  the conclusion holds and the reason needs rewording. `claude-proposes`
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line
