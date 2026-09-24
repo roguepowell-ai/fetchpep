@@ -4,7 +4,8 @@ authority: claude-writes
 
 # Open
 
-Unresolved, ordered by what they block.
+Unresolved, ordered by what they block. Resolved items stay, annotated with the date and
+the evidence, until they are moved to `state/SESSION-LOG.state.md`.
 
 ## Blocking everything
 
@@ -13,6 +14,11 @@ Top of the list since the first plan. Needs a sprite editor and an afternoon —
 no accounts, no device. It is the only number that says whether the product works at any
 scale. Forty minutes is a business. Four hours means the content pipeline is the product
 and much of the specified architecture is solving the wrong bottleneck.
+
+Untouched on 24 Sep while the repo, CI, ruleset, secret protection, two GCP projects and an
+HCP Terraform organisation were all stood up. Every one of those is reversible in an
+afternoon. O-1 is the only item that can invalidate the architecture, and it is the only
+one nobody has started.
 
 **O-18 · The specs do not exist.**
 `spec/` holds eight placeholders. Product, identity, brand, design, data model, places,
@@ -58,18 +64,48 @@ log for 24 Sep.
 - **O-2 · Q43 — does infrastructure say `region` or `shard`?** Free today, expensive once
   Terraform and the schema exist.
 - **O-3 · D-035 — resolved 24 Sep.** Two environments, two GCP projects, both created
-- **O-29 · HCP Terraform apply method unverified.** [likely] workspaces default to manual
-  apply, but with the repo connected an auto-apply workspace would provision real
-  infrastructure on merge with nobody clicking — which `CLAUDE.md` section 2 forbids.
-  Workspace → Settings → General → Apply Method must read **Manual apply**
-- **O-28 · Billing kill switch does not exist.** `ops/COSTS.ops.md` says it is built before
-  anything that can cost money. Two GCP projects now exist. If billing is attached to
-  either, the only failure in this system with no ceiling has no control in front of it
+
+## Blocking any infrastructure at all
+
+Ordered. Nothing below moves until the item above it does.
+
+**O-31 · HCP Terraform has no VCS provider.**
+Checked 24 Sep at `app.terraform.io/app/fetchpep/settings/version-control` — *"There are no
+VCS providers configured in this organization"*. The organisation `fetchpep` exists and is
+Terraform standalone. **This contradicts a belief held in conversation that GitHub was
+already linked**; signing in to HCP Terraform *with* a GitHub account is a different thing
+from connecting GitHub as a VCS provider, and only the second one makes runs happen on a
+pull request. Connecting it is an OAuth grant against the GitHub account and is George's to
+approve.
+
+**O-32 · There is no `infra/` directory and no `.tf` file.**
+`.claude/rules/infra.md` routes on `infra/**/*.tf`. Nothing matches it, so the rule has
+never fired. A workspace created today would have nothing to plan.
+
+**O-29 · HCP Terraform apply method — cannot be verified, because there is no workspace.**
+Checked 24 Sep at `app.terraform.io/app/fetchpep/workspaces` — *"Add your first
+workspace"*. The item was written as a verification; it is actually a setup step. It
+becomes a verification the moment a workspace exists, and the check is unchanged: Workspace
+→ Settings → General → Apply Method must read **Manual apply**, because an auto-apply
+workspace connected to the repo would provision real infrastructure on merge with nobody
+clicking, which `CLAUDE.md` section 2 forbids.
+
+**O-28 · Billing kill switch does not exist, and billing is now attached.**
+Confirmed attached to both projects, 24 Sep. `ops/COSTS.ops.md` says the kill switch is
+built before anything that can cost money. The only failure mode in this system with no
+ceiling currently has no control in front of it. It is Terraform resource number one — and
+it is behind O-31 and O-32, which is the actual reason this is urgent rather than tidy.
+
+**O-34 · Terraform CLI is extracted, not installed.**
+`terraform.exe` sits loose in `Downloads\terraform_1.16.4_windows_amd64\`. It is not on
+`PATH`, so `terraform` resolves from no shell. Only needed for local `plan`; HCP Terraform
+runs remotely. Not a blocker, but `ops/VERSIONS.ops.md` records a version that no command
+can currently confirm.
 
 ## Blocking the first build
 
 - **O-20 · Claude Code on the Windows PC.** The build seat. Nothing in Phases 1 to 4 is
-  reachable without it. Expected at the weekend.
+  reachable without it. Still never opened on the repo as of 24 Sep.
 - **O-4 · Is there an iPhone?** Without one the TestFlight gate is unreachable.
 - **O-5 · Android test device.** Not bought. Physical supply chain plus a customs question.
 - **O-6 · Apple Developer enrolment.** Failed once on a restricted network, cause unknown.
@@ -88,17 +124,42 @@ log for 24 Sep.
 - **O-13** · Bundle identifier. Proposed `art.inkfold.game`. Cannot be changed
 - **O-14** · Keystore and certificate backup policy. Two backups, one offline, day one
 
+## Expensive to leave
+
+**O-33 · The repo is inside OneDrive.**
+The working copy is `C:\Users\laure\OneDrive\Desktop\dev\github\fetchpep`. `ops/RUNBOOK.ops.md`
+step 1 says, in its own words, not inside any cloud-synced folder — and step 1 exists
+because it is the most expensive thing to get wrong. Survivable today: the repo is text,
+two commits, no Unity project, no LFS payload. [certain] It stops being survivable when
+Unity's `Library/` lands in it — thousands of files regenerated constantly, which sync
+clients turn into cloud-only placeholders that Unity and git then read as empty. Moving it
+now is a drag-and-drop and a re-clone. Moving it after a Unity project exists is not.
+
+Related: **O-27 · transfer the repo to an organization**, if that is still wanted. Cheap
+now, and the URL change is the same disruption as the folder move, so the two are one job.
+
 ## Housekeeping
 
-- **O-21** · Branch protection on `main`. **Corrected 24 Sep:** [certain] GitHub does not
-  enforce rulesets *or* classic branch protection on a **private** repository on the free
-  plan — both settings pages carry the banner, and a rule created there appears in settings
-  while blocking nothing. An imagined control is worse than a missing one. Resolved by
-  moving to GitHub Team (~£4/month). Until that lands, `.githooks/pre-push` is the
-  substitute: local, fast, bypassable with `--no-verify`
-- **O-27** · **Transfer the repo to an organization.** GitHub Team is an org plan and
-  `roguepowell-ai` is a personal account. The transfer changes the repo URL and the git
-  remote. Cheap now — two commits, no Unity project, no LFS history. Expensive later
+- **O-21 · Branch protection — resolved 24 Sep.** [certain] GitHub does not enforce
+  rulesets *or* classic branch protection on a **private** repository on the free plan.
+  Resolved by making the repo public rather than by paying: a ruleset on `main` is Active,
+  bypass list empty, requiring a pull request and the `contract` status check. **Evidence:**
+  on PR #1 both `contract / contract (pull_request)` and `contract / contract (push)` are
+  labelled **Required** by GitHub, which is the first proof the ruleset binds rather than
+  merely appearing in settings.
+- **O-30 · Secret scanning and push protection — resolved 24 Sep.** Both enabled at
+  Settings → Advanced Security → Secret Protection. **Evidence:** the section's control now
+  reads *Disable*, and Push protection's reads *Disable push protection*. [certain]
+  Server-side, so unlike `.githooks/pre-push` it cannot be bypassed with `--no-verify`.
+  This item was named in the PR #1 description as having been added to this file. It had
+  not been. Recorded here rather than quietly corrected.
+- **O-35 · `.githooks/pre-push` has never run.** It is committed, but `core.hooksPath` is
+  not set in the working copy, so GitHub Desktop pushed straight past it. One command in
+  the repo root: `git config core.hooksPath .githooks`. Until then the hook is documentation.
+- **O-36 · `infra/` has no declared write authority.** `CLAUDE.md` section 6 lists `rules/`,
+  `spec/`, `ops/`, `state/`, `checks/` and `hooks/`. It does not list `infra/`. Terraform is
+  the one directory in this repo where a Claude write can spend money, and it is the one
+  directory with no authority row. `CLAUDE.md` is `george-only`.
 - **O-17** · The Inkfold design system README groups `FetchPep` with two retired terms as
   things not to copy. Two stay banned; `FetchPep` is now the live codename and must be
   split out of that line
