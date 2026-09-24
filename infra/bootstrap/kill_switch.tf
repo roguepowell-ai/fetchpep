@@ -359,9 +359,10 @@ output "function" {
 output "topic" {
   description = <<-EOT
     Publish a test notification here to exercise the function. The function ignores any
-    message that lacks all three of: budgetDisplayName "fetchpep-dev-kill"; a costAmount
-    above kill_amount; a costIntervalStart in the current month. The test_message output
-    has all three. Publish it with:
+    message that does not have all three of: budgetDisplayName "fetchpep-dev-kill"; a
+    costAmount above kill_amount; a costIntervalStart in the current month. The
+    test_message output has all three, for the month of the last apply, so apply (or
+    apply -refresh-only) in the month you test. Publish it with:
       gcloud pubsub topics publish "$(terraform output -raw topic)" \
         --message "$(terraform output -raw test_message)"
     In dry run the function's logs then show "would detach billing" with couldDetach.
@@ -370,7 +371,9 @@ output "topic" {
 }
 
 # A message the function acts on: the kill budget, one unit over kill_amount, this month.
-# Rebuilt at every plan, so the month is always the current one.
+# terraform output reads the value saved in state at the last apply, not a fresh plan, so
+# the month is the month of that apply. Apply (or apply -refresh-only) in the month you
+# test, or the message carries an ended month and the function ignores it.
 output "test_message" {
   description = "A budget notification the function acts on. Publish it to the topic output."
   value = jsonencode({

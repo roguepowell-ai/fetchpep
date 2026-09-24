@@ -102,7 +102,8 @@ produces the "would detach" log line; then dry-run is switched off by George.
 **Status, 24 Sep:** built on branch `kill-switch-b001`, not applied; per D-072, applied
 before the game goes public. PR #9, opened by operations (the PR page reads *Open*). The
 first review returned *changes needed*, fixed in `ada344a`; the second returned *pass with
-changes*, fixed in the commit that adds this paragraph. Merge is George's. Outputs from the
+changes*, fixed in `7d46cc1`; the third returned *pass with changes*, wording only, fixed in
+the commit that adds the last row of the table below. Merge is George's. Outputs from the
 developer's session:
 
 ```
@@ -111,17 +112,19 @@ git --version                    git version 2.55.0.windows.5
 git config core.hooksPath        .githooks
 ```
 
-`terraform fmt -check -recursive` and `terraform validate` ran twice, each on a known tree:
+`terraform fmt -check -recursive` and `terraform validate` ran three times, each on a known
+tree:
 
 | Ran on | `fmt -check` | `validate` |
 |---|---|---|
 | `ada344a`, checked out with `infra/` equal to HEAD (`git diff --quiet HEAD -- infra`) | no output, exit 0 | `Success! The configuration is valid.` exit 0 |
-| The commit that adds this paragraph: `kill_switch.tf` blob `d85fb0c`, `versions.tf` blob `de0e78d`, `.terraform.lock.hcl` blob `f7fe153` | no output, exit 0 | `Success! The configuration is valid.` exit 0 |
+| `7d46cc1`: `kill_switch.tf` blob `d85fb0c`, `versions.tf` blob `de0e78d`, `.terraform.lock.hcl` blob `f7fe153` | no output, exit 0 | `Success! The configuration is valid.` exit 0 |
+| The commit that adds this row: `kill_switch.tf` blob `40496fa`, `versions.tf` blob `de0e78d`, `.terraform.lock.hcl` blob `f7fe153` | no output, exit 0 | `Success! The configuration is valid.` exit 0 |
 
-A commit cannot name its own hash, so the second row names the blobs. To check, the blob of
-`git rev-parse <commit>:infra/bootstrap/kill_switch.tf` must start `d85fb0c`, and likewise
-for the other two. `infra/` is unchanged between `ada344a` and `69c67b0` (George's merge of
-`main` and D-073/D-074), so the first row also covers `69c67b0`.
+A commit cannot name its own hash, so the rows after the first name the blobs. To check,
+`git rev-parse <commit>:infra/bootstrap/kill_switch.tf` must start with the blob in that
+row, and likewise for the other two. `infra/` is unchanged between `ada344a` and `69c67b0`
+(George's merge of `main` and D-073/D-074), so the first row also covers `69c67b0`.
 
 `terraform` is `Downloads\terraform_1.16.4_windows_amd64\terraform.exe`, run in
 `infra/bootstrap/` after `terraform init -backend=false` (O-34).
@@ -179,8 +182,8 @@ billing account id.
 `@google-cloud/functions-framework` `5.0.5` is now declared exactly, with a committed
 `package-lock.json` of 128 packages. R-SEC-04 makes a new dependency on a money path a
 decision. It is not new in substance: without the declaration, the platform installs the
-framework itself, at a version nobody chose. Developer's position: pin it. George confirms
-with an ID, or rules otherwise, before PR #9 merges.
+framework itself, at a version nobody chose. The developer proposed pinning it; George
+chose "Pin 5.0.5", recorded as D-073.
 
 **O-69 · `CLAUDE.md` section 2 has no D-070 exception — resolved 24 Sep by D-074, wording
 applied.** It reads "never touch billing
