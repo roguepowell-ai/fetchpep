@@ -7,22 +7,24 @@ authority: claude-writes
 The **caught** tier. Blocked things live in `hooks/`; explained things live in `rules/` and
 `spec/`. See `rules/WORKING-METHOD.rule.md` for why the tiers exist.
 
-A check runs in CI on every push and blocks the merge. It reads the contract as **data**,
-never as instructions.
+A check blocks the merge when it runs in CI, and refuses the push when it runs in the
+pre-push hook. It reads the contract as **data**, never as instructions. Six run in CI
+(`.github/workflows/checks.yml`); three run only in the hook until the workflow is
+extended (O-42).
 
 ## The checks
 
-| Check | Fails when |
-|---|---|
-| `router-size.check.sh` | `CLAUDE.md` exceeds 150 lines |
-| `router-links.check.sh` | `CLAUDE.md` references a path that does not exist |
-| `router-orphans.check.sh` | A contract file exists that nothing routes to |
-| `frontmatter.check.sh` | A contract file has missing or invalid `authority:` |
-| `banned-terms.check.sh` | A banned term appears outside the files that define it |
-| `authority.check.sh` | A Claude-authored commit touches a `george-only` file |
-| `secrets.check.sh` | Anything that looks like a credential is committed |
-| `versions.check.sh` | `ops/VERSIONS.ops.md` disagrees with what is actually pinned |
-| `naming.check.sh` | A contract file is named outside the convention |
+| Check | Fails when | Runs in |
+|---|---|---|
+| `router-size.check.sh` | `CLAUDE.md` exceeds 150 lines | CI, hook |
+| `router-links.check.sh` | `CLAUDE.md` references a path that does not exist | CI, hook |
+| `router-orphans.check.sh` | A contract file exists that nothing routes to | CI, hook |
+| `frontmatter.check.sh` | A contract file has missing or invalid `authority:` | CI, hook |
+| `banned-terms.check.sh` | A banned term appears outside the files that define it | CI, hook |
+| `authority.check.sh` | A Claude-authored commit touches a `george-only` file | CI |
+| `secrets.check.sh` | Anything that looks like a credential is committed | hook only |
+| `versions.check.sh` | `ops/VERSIONS.ops.md` disagrees with what is actually pinned | hook only |
+| `naming.check.sh` | A contract file is named outside the convention | hook only |
 
 ## The two that matter most
 

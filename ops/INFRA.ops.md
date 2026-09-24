@@ -35,10 +35,10 @@ on AWS — so the database city fixes the server city, and London puts both in o
 
 *Region* here means a cloud location and nothing else. The game has no regions (D-051).
 
-`.claude/rules/infra.md` rule 4 still says **EU regions**. London is not in the EU, so that
-rule must read **EU or UK** before any Terraform is written. [certain] Gibraltar-to-UK
-transfers need no extra safeguards since 15 July 2026 — see `spec/PRIVACY.spec.md`. The
-rule file cannot be written remotely; O-39.
+`.claude/rules/infra.md` rule 4 still says **EU regions**; London is not in the EU. The
+replacement (**EU or UK**) is approved (D-068) and waits to be applied — the remote tools
+cannot write under `.claude/` (O-39). [certain] Gibraltar-to-UK transfers need no extra
+safeguards since 15 July 2026 — see `spec/PRIVACY.spec.md`.
 
 No Firebase for now (D-042), so nothing in the stack locks a location except what Terraform
 creates. [certain] A Firestore database's location cannot be changed once provisioned — if a
