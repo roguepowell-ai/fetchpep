@@ -84,8 +84,10 @@ by D-070 — the one time an agent writes the kill switch. Closes O-28 when appl
    notifying a Pub/Sub topic; a function subscribed to it that detaches billing from
    `fetchpep-dev` when actual cost passes the budget. Every location `europe-west2` (D-043);
    names use the codename. Least privilege for the function's service account
-3. **Leave the money to George.** The budget amount and the billing account id are required
-   variables with no default. The PR asks George for the amount. No secret in any file
+3. **Leave the money to George.** The amounts and the billing account id are required
+   variables with no default. George set the amounts in D-071: an email past 10, detach past
+   30, in the billing account's own currency (leave the currency unset). Say in the PR whether
+   the budget counts cost before or after credits, and why. No secret in any file
 4. **A dry-run switch.** The function takes a setting that logs "would detach" instead of
    detaching, so the first test cannot switch billing off
 5. **Pin versions** (`ops/VERSIONS.ops.md`, rule 1): exact provider versions, commit
