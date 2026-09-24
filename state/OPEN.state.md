@@ -124,22 +124,11 @@ can currently confirm.
 - **O-13** · Bundle identifier. Proposed `art.inkfold.game`. Cannot be changed
 - **O-14** · Keystore and certificate backup policy. Two backups, one offline, day one
 
-## Expensive to leave
-
-**O-33 · The repo is inside OneDrive.**
-The working copy is `C:\Users\laure\OneDrive\Desktop\dev\github\fetchpep`. `ops/RUNBOOK.ops.md`
-step 1 says, in its own words, not inside any cloud-synced folder — and step 1 exists
-because it is the most expensive thing to get wrong. Survivable today: the repo is text,
-two commits, no Unity project, no LFS payload. [certain] It stops being survivable when
-Unity's `Library/` lands in it — thousands of files regenerated constantly, which sync
-clients turn into cloud-only placeholders that Unity and git then read as empty. Moving it
-now is a drag-and-drop and a re-clone. Moving it after a Unity project exists is not.
-
-Related: **O-27 · transfer the repo to an organization**, if that is still wanted. Cheap
-now, and the URL change is the same disruption as the folder move, so the two are one job.
-
 ## Housekeeping
 
+- **O-27** · **Transfer the repo to an organization**, if still wanted. The transfer changes
+  the repo URL and the git remote. Cheap now — no Unity project, no LFS history. Expensive
+  later
 - **O-21 · Branch protection — resolved 24 Sep.** [certain] GitHub does not enforce
   rulesets *or* classic branch protection on a **private** repository on the free plan.
   Resolved by making the repo public rather than by paying: a ruleset on `main` is Active,
