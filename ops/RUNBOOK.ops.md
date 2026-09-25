@@ -438,14 +438,42 @@ VCS-driven run work later (O-31), so it is right either way.
 
 Each step needs the one before it.
 
-0. **Secret Manager's service agent.** [likely] The agent is created the first time the
-   service is used, and the bootstrap stack grants it publisher on the rotation topic — a
-   binding to a principal that does not exist yet is refused. Nothing has enabled Secret
-   Manager at this point, because the bootstrap stack is what would, and it runs next. Both
-   commands are safe to repeat:
+0. **Switch on the services, by hand, before anything else.** George's preference: a
+   one-time activation is a thing a person does once, not something buried in code that runs
+   every apply.
 
    ```
-   gcloud services enable secretmanager.googleapis.com --project fetchpep-dev
+   gcloud services enable \
+     cloudresourcemanager.googleapis.com iam.googleapis.com \
+     iamcredentials.googleapis.com sts.googleapis.com \
+     pubsub.googleapis.com secretmanager.googleapis.com \
+     compute.googleapis.com iap.googleapis.com oslogin.googleapis.com \
+     logging.googleapis.com monitoring.googleapis.com \
+     --project fetchpep-dev
+   ```
+
+   **The kill switch's own services are deliberately not in that list** — no
+   `billingbudgets`, `cloudbilling`, `cloudfunctions`, `cloudbuild`, `run`, `eventarc`,
+   `artifactregistry` or `storage`. They are switched on at the launch apply, with the kill
+   switch itself (D-099, D-072).
+
+   ```
+   verify: gcloud services list --enabled --project fetchpep-dev
+           lists all eleven above, and none of the eight kill-switch ones
+   ```
+
+   Both stacks still **declare** these services, in `infra/bootstrap/workload_identity.tf`
+   and `infra/dev/versions.tf`, all with `disable_on_destroy = false`. On a service that is
+   already on, the declaration does nothing. It is there so that the configuration still
+   describes what the project needs — someone rebuilding this from the repository alone gets
+   a working project, and nobody has to remember this step to read it off.
+
+0b. **Secret Manager's service agent.** Separate from the enable above, because Terraform
+   cannot create it and neither can `services enable`. [likely] The agent appears the first
+   time the service is used, and the bootstrap stack grants it publisher on the rotation
+   topic — a binding to a principal that does not exist yet is refused. Safe to repeat:
+
+   ```
    gcloud beta services identity create --service=secretmanager.googleapis.com \
      --project fetchpep-dev
    ```
