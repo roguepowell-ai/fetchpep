@@ -69,7 +69,8 @@ log for 24 Sep.
 
 ## Brief B-001 — for the developer: the billing kill switch
 
-From the project manager, 24 Sep. Developer: Claude Code on George's PC (D-069). Authorised
+From the project manager, 24 Sep. Developer: Claude Code on George's PC (D-069 — the seat
+moved to Claude Code CLI in Cloud Shell on 25 Sep, D-085). Authorised
 by D-070 — the one time an agent writes the kill switch. Closes O-28 when applied.
 
 1. **Set up the seat.** Run `node --version`, `git --version` and
@@ -136,7 +137,7 @@ Ordered. Nothing below moves until the item above it does.
 - **O-50 to O-53 · resolved 24 Sep by D-062 to D-065.** Game logic in Nakama; PostgreSQL
   on the VM; HCP Terraform with one Cloud Shell bootstrap; Cloudflare Tunnel and R2
 
-**O-54 · Nakama's own tables, or ours — resolved 25 Sep by D-079 (split).** Nakama holds
+**O-54 · Nakama's own tables, or ours — resolved 24 Sep by D-079 (split).** Nakama holds
 accounts, sign-in and sessions; all game data lives in `directory` and `shard_gi`. Still
 unverified, and carried by D-079 to the VM brief: that the TypeScript runtime can write to
 those tables. The original item: D-063 puts one PostgreSQL on the VM. Nakama
@@ -145,7 +146,7 @@ SQL tables. Proposed: Nakama's tables for accounts and sign-in only; `directory`
 `shard_gi` for all game data, written from the TypeScript modules. Verify how the
 TypeScript runtime reaches SQL before relying on it.
 
-**O-55 · How game identity gets into the game — resolved 25 Sep by D-080 (invite by
+**O-55 · How game identity gets into the game — resolved 24 Sep by D-080 (invite by
 email), through the D-081 door.** Phone pairing is no longer part of it (D-076). Sign-in
 methods stay open as O-47. The original item: `spec/DATA-MODEL.spec.md` puts game
 identity in `directory`; Nakama keeps its own accounts. D-054 gives every steward and
@@ -219,9 +220,16 @@ the refusal message, exit 1. **Not proven:** a push from the GitHub Desktop app 
 George's next push from Desktop is that test.
 
 **O-72 · The standing watch in D-075: the developer's position differs — resolved 25 Sep
-by D-083.** George chose "Watch + one line from me": the developer watches and notifies,
-and George starts each piece of work with one line in the session. The loop is written in
-`ops/RUNBOOK.ops.md` Part 4. The positions as they were raised, under D-069:
+by D-083, then reopened and settled the other way the same day by D-084 and D-086.**
+George first chose "Watch + one line from me": the developer watches and notifies, and
+George starts each piece of work with one line in the session. He then chose the standing
+go-ahead — "if I approve an action with you, why get me involved" — and put it in the
+contract rather than in a typed line (D-086): the developer acts on briefs and reviews by
+`roguepowell-ai` without asking, and stops only for the list in `CLAUDE.md` section 7. The
+developer's first reason below therefore no longer holds: a decision recorded in this repo
+*can* lift the per-item go-ahead, because George is the one who recorded it. The second and
+third stand as risks the contract accepts. The loop is written in `ops/RUNBOOK.ops.md`
+Part 4. The positions as they were raised, under D-069:
 - **D-075, step 4 and step 5 of B-002 (issue #11):** after the step-0 PR merges, the
   developer runs a standing loop and *acts* on any issue or comment by `roguepowell-ai`.
 - **The developer's position:** the loop can **watch and report** (poll issues and review
@@ -359,23 +367,23 @@ can currently confirm.
 - **O-59 · PRIVACY's reason for keys in Cloud KMS cites Neon.** It says Neon's restorable
   history would bring a deleted key back. Under D-063 the VM's disk snapshots do the same, so
   the conclusion holds and the reason needs rewording. `claude-proposes`
-- **O-60 · Steward controls into the game, reports out — resolved 25 Sep by D-081.** One
+- **O-60 · Steward controls into the game, reports out — resolved 24 Sep by D-081.** One
   narrow live door, `apply_control`, logged in `directory.door_log`. How reports travel out
   is left to the brief that builds the door. The original item: the visitor lock, fold membership,
   blocks and phone pairing are set on the website; a report filed in the game must reach a
   person. D-066 says nothing live between them, and a release batch is too slow for a lock.
   Proposed: a second server-to-server door, `apply_control`, logged in `directory.door_log`.
   Needs a decision, because it is a live call from the website into the game
-- **O-61 · Sign-in: the picker or a login — resolved 25 Sep by D-076 (a login).** The
+- **O-61 · Sign-in: the picker or a login — resolved 24 Sep by D-076 (a login).** The
   original item: D-054 gives every member a login; the App Shell's "Who's playing" picker
   assumes members have none (O-48, O-47)
-- **O-62 · Specimen names are free text — resolved 25 Sep by D-077 (blocked-word list).**
+- **O-62 · Specimen names are free text — resolved 24 Sep by D-077 (blocked-word list).**
   `spec/DATA-MODEL.spec.md` proposes `directory.name_filter`, versioned release data, with
   `specimen_name.filter_version` recording which list decided each name. The list's words
   are not written. The original item: the only text a member types that others might see.
   No moderation path exists in the game. Options: names private to the fold, a word list,
   or a check
-- **O-63 · Who is credited when a creature is fed or kept — resolved 25 Sep by D-078
+- **O-63 · Who is credited when a creature is fed or kept — resolved 24 Sep by D-078
   (both).** D-078 says "the skeleton already does this". That was true for feeding and not
   for keeping, so `creature_interaction` gains a `kept` row, written when a capture goes into
   a pen slot. The original item: D-058 gives every creature an artist and a creator. The

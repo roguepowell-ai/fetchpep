@@ -55,6 +55,12 @@ crash.log
 !*.tfvars.example
 infra/**/.build/
 
+# ---- Claude Code ----
+# Per-seat permission grants (D-087). The seat's own file, never the repo's: a grant that
+# travels with a clone is a grant nobody chose. The machine's global ignore already covers
+# it; this line makes that survive a fresh clone.
+.claude/settings.local.json
+
 # ---- OS ----
 .DS_Store
 Thumbs.db
