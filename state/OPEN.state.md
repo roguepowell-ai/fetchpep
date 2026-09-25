@@ -71,6 +71,52 @@ tools only.** A fix means matching on Bash commands as well, which is a decision
 that parses shell has its own failure mode, and refusing every write-shaped Bash command
 would stop ordinary work.
 
+**O-74 · `services/nakama/build/index.js` is committed and nothing checks it matches `src/`.**
+Nakama loads one JavaScript file. The VM has no build step and there is no image registry
+of ours (the kill switch's Artifact Registry repository is the kill switch's, D-070), so
+`infra/dev/vm_nakama.tf` reads the built file with `file()` and delivers it in instance
+metadata. That works and is reproducible — `tsconfig.json` lists its inputs in order rather
+than globbing, so the same sources give the same bytes — but nothing stops someone editing
+`src/` without rebuilding, and the VM would then run the older module with no sign of it.
+Proposed check: run `npm run build`, fail if `git diff --exit-code build/` is non-empty. It
+is a new gate, and promoting a rule up a tier is itself a decision
+(`rules/WORKING-METHOD.rule.md`), so it needs an ID. The alternatives are both bigger: build
+on the VM at boot, or push an image to Artifact Registry and pull it.
+
+**O-75 · The two migrations now exist in two places.**
+`spec/DATA-MODEL.spec.md` holds them as fenced SQL and `services/nakama/migrations/` holds
+them as files. Brief #13 says to take the files from the spec, and they were extracted with
+the same reader `checks/skeleton.test.mjs` uses, so today they are equal. Nothing keeps
+them so. If they drift, the spec test proves one thing and the VM runs another. Same shape
+as O-74 and the same cost: a check is a tier promotion and needs an ID. The other way out is
+for the spec to point at the files instead of carrying the SQL — a bigger edit than it
+sounds, because the spec's *Evidence* section reads the SQL out of itself.
+
+**O-76 · `directory.door_log` cannot record the outcome it defines.**
+`outcome` allows `'duplicate'`, and `idempotency_key` is `UNIQUE`. A second call under a key
+already used therefore cannot be written at all — the index refuses the insert before the
+outcome matters. `publish_release` handles it by reading the first call back and returning
+`duplicate` to the caller without writing, which is the right behaviour and leaves the
+`'duplicate'` value unreachable. One of the two should go: the outcome, or the unique index
+in favour of one that allows repeats. Found building #13. Schema, so
+`spec/DATA-MODEL.spec.md`, and a migration if it changes.
+
+**O-77 · Where `invite-email-hmac-key` lives.**
+`spec/DATA-MODEL.spec.md` names five Secret Manager secrets and leaves this one's home to
+the VM brief. Brief #13 asks for four, and the four are built. The fifth is different in
+kind: D-080 has the website compute the HMAC of an invited address and the game compute the
+same HMAC at sign-in, so both sides need the same key — and there is no website, no decision
+about where it runs, and no Cloudflare account (`ops/INFRA.ops.md`). A secret with one
+holder and no second holder cannot have its sharing designed yet. Asked on issue #13.
+
+**O-78 · Docker Hub is an unauthenticated dependency between a reboot and a running game.**
+The VM pulls `heroiclabs/nakama:3.40.0` and `postgres:16.15` from Docker Hub at boot,
+through Cloud NAT, with no account. [certain] Docker Hub rate-limits anonymous pulls by IP.
+A reboot in a busy hour can fail to start the service, and the failure reads as a broken VM
+rather than as a quota. Both tags are exact, so what is at risk is availability, not what
+gets run. The fix is to mirror both images into Artifact Registry in `fetchpep-dev` and pull
+from there: a new repository, a new cost line and a decision, so not in #13.
+
 ## Blocking the world map
 
 - **O-2 · Q43 — resolved 24 Sep by D-051.** The game has no regions. The shared instance is
