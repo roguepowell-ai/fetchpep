@@ -22,9 +22,18 @@
 # `google_project_service.apis` in kill_switch.tf; a second resource for the same service
 # would fight it, so these are only the ones that file does not already name.
 
+# **`pubsub.googleapis.com` is deliberately declared here as well as in `kill_switch.tf`.**
+# The rotation topic below needs Pub/Sub on, and D-099 keeps every kill-switch resource out
+# of the first apply — `google_project_service.apis` is one of them, declared in
+# `kill_switch.tf`, so depending on it would pull that file's resource into a targeted apply
+# that is supposed to exclude it. Two `google_project_service` resources naming one service
+# is untidy, and it is the right trade: enabling a service is idempotent, both carry
+# `disable_on_destroy = false` so neither can turn it off, and the alternative is either
+# editing `kill_switch.tf` (D-070) or breaking D-099.
 resource "google_project_service" "federation" {
   for_each = toset([
     "iamcredentials.googleapis.com",
+    "pubsub.googleapis.com",
     "secretmanager.googleapis.com",
     "sts.googleapis.com",
   ])
@@ -159,31 +168,36 @@ resource "google_service_account" "tfc_apply" {
   description  = "Creates what infra/dev declares. Impersonated by apply runs only. Holds no key."
 }
 
+# A map with **literal keys**, not a set. `for_each` keys have to be known at plan time, and
+# a custom role's `id` is "known after apply" on a project where it does not exist yet — so a
+# set built from it cannot be keyed and the plan fails with `Invalid for_each argument`
+# before it creates anything. The value may be unknown; the key may not.
 resource "google_project_iam_member" "tfc_plan" {
-  for_each = toset([
-    "roles/compute.viewer",
-    google_project_iam_custom_role.tf_plan.id,
-  ])
+  for_each = {
+    compute_viewer = "roles/compute.viewer"
+    custom         = google_project_iam_custom_role.tf_plan.id
+  }
 
   project = local.project_id
   role    = each.value
   member  = google_service_account.tfc_plan.member
 }
 
+# Literal keys, for the reason above.
 resource "google_project_iam_member" "tfc_apply" {
-  for_each = toset([
+  for_each = {
     # infra/dev/vm_nakama.tf — the instance, its boot disk, its metadata
-    "roles/compute.instanceAdmin.v1",
+    instance_admin = "roles/compute.instanceAdmin.v1"
     # infra/dev/network.tf — the VPC, the subnet, Cloud NAT and the router
-    "roles/compute.networkAdmin",
+    network_admin = "roles/compute.networkAdmin"
     # infra/dev/network.tf — the firewall rules
-    "roles/compute.securityAdmin",
+    security_admin = "roles/compute.securityAdmin"
     # infra/dev/snapshots.tf — the snapshot schedule, and the data disk
-    "roles/compute.storageAdmin",
+    storage_admin = "roles/compute.storageAdmin"
     # infra/dev/secrets.tf — the secret containers and who may read each one, and
     # infra/dev/network.tf — who may open an IAP tunnel. Never a secret value.
-    google_project_iam_custom_role.tf_apply.id,
-  ])
+    custom = google_project_iam_custom_role.tf_apply.id
+  }
 
   project = local.project_id
   role    = each.value
@@ -223,14 +237,10 @@ resource "google_pubsub_topic" "secret_rotation" {
     allowed_persistence_regions = [local.location]
   }
 
-  # Both API sets: `federation` for Secret Manager, and the kill switch's `apis` for
-  # `pubsub.googleapis.com`. This adds a reference to that resource and does not edit
-  # `kill_switch.tf` (D-070). On the existing project Pub/Sub is already on, so today it
-  # changes nothing; on a fresh project it is the difference between working and a race.
-  depends_on = [
-    google_project_service.federation,
-    google_project_service.apis,
-  ]
+  # Only this file's own API resource. Depending on the kill switch's `apis` would drag a
+  # `kill_switch.tf` resource into the targeted first apply, which is exactly what D-099
+  # forbids — see the note above `google_project_service.federation`.
+  depends_on = [google_project_service.federation]
 }
 
 # [certain] Secret Manager publishes rotation notices as its own service agent, and refuses
@@ -278,11 +288,12 @@ resource "google_service_account_iam_member" "runner_uses_nakama" {
 }
 
 # Both phases need to read it: infra/dev looks it up with a data source.
+# Literal keys again: a service account's `member` is not known until it exists.
 resource "google_service_account_iam_member" "runners_view_nakama" {
-  for_each = toset([
-    google_service_account.tfc_plan.member,
-    google_service_account.tfc_apply.member,
-  ])
+  for_each = {
+    plan  = google_service_account.tfc_plan.member
+    apply = google_service_account.tfc_apply.member
+  }
 
   service_account_id = google_service_account.nakama.name
   role               = "roles/iam.serviceAccountViewer"

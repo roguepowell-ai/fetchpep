@@ -20,7 +20,7 @@ version" does not work — this does, because it is told rather than remembered.
 | Unity CLI | `TBD` | not pinnable | Installed from the **beta** channel |
 | Node | `24.21.0` | `services/nakama/.nvmrc` · `node-version-file` in `.github/workflows/checks.yml` | What the Cloud Shell seat runs, so the bundle CI compares against is built on the same host as the one the developer builds on. Exact, not `24`: the D-097 check is a byte-for-byte comparison |
 | pnpm | `TBD` | `packageManager` in `package.json` | |
-| Terraform | `1.16.4` | `infra/.terraform-version` · `required_version` in each stack | Not installed on the Cloud Shell seat: the binary is fetched into the session's scratch folder, checksum-checked against HashiCorp's `SHA256SUMS`, and run from there (D-085). O-34 is the same gap on the retired PC seat |
+| Terraform | `1.16.4` | `infra/.terraform-version` · `required_version` in each stack | sha256 of `terraform_1.16.4_linux_amd64.zip` is `dc94af0eef1147718ad7c8daea792ed199e3e0492eec180d0adafa2a65a879df`, written down here so a `SHA256SUMS` served by the same host is checkable against something of ours. Not installed on the Cloud Shell seat: the binary is fetched into the session's scratch folder, checksum-checked against HashiCorp's `SHA256SUMS`, and run from there (D-085). O-34 is the same gap on the retired PC seat |
 | Terraform `hashicorp/google` | `8.4.0` | `versions.tf` · `.terraform.lock.hcl` | Locked for `linux_amd64` (Cloud Shell) and `windows_amd64` |
 | Terraform `hashicorp/archive` | `2.8.1` | `versions.tf` · `.terraform.lock.hcl` | Zips the kill-switch source |
 | `actions/checkout` | `v7.0.1` = `3d3c42e5aac5` | `.github/workflows/checks.yml`, by SHA | [certain] A tag is movable, so the SHA is the pin and the tag is the comment |

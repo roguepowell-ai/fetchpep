@@ -338,19 +338,49 @@ developer never applies. Nothing in this part is automatic.
 
 ## 20. Before anything: the two workspaces, and the tool
 
+### The repository
+
+Everything below runs from a clone of `main`. Get one, or bring an existing one up to date:
+
+```
+cd ~ && gh repo clone roguepowell-ai/fetchpep      # first time
+cd ~/fetchpep && git checkout main && git pull     # every time after
+git config core.hooksPath .githooks                # once per clone
+```
+
+```
+verify: cd ~/fetchpep && git log --oneline -1   is the merge you mean to apply
+```
+
 ### The tool
 
 Terraform is **not installed** on Cloud Shell — `/google/bin/terraform` is a stub that
-prints installation instructions. Fetch the pinned version and check it, per session:
+prints installation instructions. Fetch the pinned version and check it, per session.
+
+**Every line is chained with `&&` on purpose.** Pasted as separate lines, a failed
+`sha256sum` still lets `unzip` run on the next line, and the check becomes decoration:
 
 ```
-cd ~ && mkdir -p tfbin && cd tfbin
-curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_SHA256SUMS
-curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_amd64.zip
-sha256sum -c --ignore-missing terraform_1.16.4_SHA256SUMS
-unzip -o terraform_1.16.4_linux_amd64.zip && export PATH="$HOME/tfbin:$PATH"
+mkdir -p ~/tfbin && cd ~/tfbin \
+  && curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_SHA256SUMS \
+  && curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_amd64.zip \
+  && sha256sum -c --ignore-missing terraform_1.16.4_SHA256SUMS \
+  && unzip -o terraform_1.16.4_linux_amd64.zip \
+  && export PATH="$HOME/tfbin:$PATH" \
+  && terraform version
 terraform login          # a browser token for app.terraform.io, once per machine
 ```
+
+The expected hash is in `ops/VERSIONS.ops.md`, so a `SHA256SUMS` served by a compromised
+host is checkable against something we wrote down:
+
+```
+dc94af0eef1147718ad7c8daea792ed199e3e0492eec180d0adafa2a65a879df  terraform_1.16.4_linux_amd64.zip
+```
+
+[certain] This does **not** verify HashiCorp's signature. The `.sig` file and their GPG key
+would do that; the pinned hash covers the case that matters here — the file changing between
+the version this was written against and the one George downloads.
 
 ```
 verify: terraform_1.16.4_linux_amd64.zip: OK
@@ -427,10 +457,20 @@ Each step needs the one before it.
    than a `count` switch, deliberately: a `count` would mean editing `kill_switch.tf`, and
    only George merges a change to that file (D-070). `-target` leaves it untouched.
 
+   **Pass the three kill-switch variables anyway.** [certain] Terraform prompts for every
+   required root variable with no value, whether or not any targeted resource reads one — so
+   without these the plan stops at an interactive prompt and step 1 cannot finish. They are
+   declared in `kill_switch.tf`, nothing in this plan reads them, and they reach no resource.
+   Their validations still apply, so the values must be well formed: `kill_amount >
+   warn_amount`, and the billing id in `000000-000000-000000` form. Use the real ones from
+   D-071 — they change nothing today and are right when the kill switch is applied at launch.
+
    ```
    cd ~/fetchpep/infra/bootstrap
    terraform init                    # creates the workspace; then set Execution mode Local
    terraform plan -out=trust.plan \
+     -var billing_account=<the billing account id> \
+     -var warn_amount=10 -var kill_amount=30 \
      -target=google_project_service.federation \
      -target=google_iam_workload_identity_pool.hcp_terraform \
      -target=google_iam_workload_identity_pool_provider.hcp_terraform \
@@ -450,21 +490,50 @@ Each step needs the one before it.
      -target=google_pubsub_topic_iam_member.secret_manager_publisher
    ```
 
-   **Read the plan before applying it.** Two things to look for, in this order:
+   **Read the plan before applying it**, and read it by **address**. A name pattern is not
+   enough: `google_pubsub_topic.budget`, `google_pubsub_topic_iam_member.budget_publisher`
+   and `google_project_iam_custom_role.detach_billing` are all kill-switch resources with no
+   "kill" in the address.
 
    ```
-   verify: the plan creates ZERO kill-switch resources — no google_billing_budget,
-           no google_cloudfunctions2_function, no google_storage_bucket, no
-           google_artifact_registry_repository, no google_project_iam_custom_role
-           .detach_billing, and no google_service_account named kill_* (D-099, D-072)
-           grep -cE 'google_billing_budget|cloudfunctions2|storage_bucket|artifact_registry|kill_' <the plan output>   →   0
+   terraform show -json trust.plan | jq -r '.resource_changes[].address' | sort > planned.txt
+   ```
+
+   Every one of `kill_switch.tf`'s eighteen addresses must be **absent** from it:
+
+   ```
+   for a in google_project_service.apis \
+            google_pubsub_topic.budget \
+            google_pubsub_topic_iam_member.budget_publisher \
+            google_billing_budget.warn \
+            google_billing_budget.kill \
+            google_service_account.kill_switch \
+            google_service_account.kill_trigger \
+            google_service_account.kill_build \
+            google_project_iam_custom_role.detach_billing \
+            google_project_iam_member.kill_switch_detach \
+            google_project_iam_member.kill_build_logs \
+            google_project_iam_member.kill_build_source \
+            google_cloud_run_service_iam_member.kill_trigger_invoke \
+            google_artifact_registry_repository.kill_switch \
+            google_artifact_registry_repository_iam_member.kill_build \
+            google_storage_bucket.source \
+            google_storage_bucket_object.function \
+            google_cloudfunctions2_function.kill_switch ; do
+     grep -qx "$a" planned.txt && echo "STOP: $a is in the plan (D-099)"
+   done
+   ```
+
+   ```
+   verify: the loop prints nothing at all (D-099, D-072)
    ```
 
    Then `terraform apply trust.plan`.
 
-   The plan will **not** prompt for `billing_account`, `warn_amount` or `kill_amount`:
-   nothing targeted refers to them. If it does prompt, a kill-switch resource is in the plan
-   and the target list is wrong — stop and say so, do not type a value to get past it.
+   **Every later change to this stack needs the same `-target` list, until launch.** A plain
+   `terraform apply` in `infra/bootstrap` would create the whole kill switch, dry-run or not.
+   That is George's decision to make once (D-070, D-072), not something that happens because
+   a flag was left off.
 
    The remaining resources stay in the configuration and out of the state, and `terraform
    plan` will keep showing them as "to add" until the launch step applies them. That is the
@@ -520,7 +589,8 @@ Each step needs the one before it.
    provider is connected, and a CLI-driven workspace accepts `-target` from the command
    line. **If HCP Terraform refuses it** — which it does on a VCS-connected workspace — take
    the fallback instead: apply the whole stack at step 5, let the first boot fail (the
-   startup script names each secret it could not read), then do step 4 and step 4a.
+   startup script stops at the **first** secret it cannot read and names that one), then do
+   step 4 and step 4a. Step 4 adds a version to all eight, so one name is enough to act on.
 
 4. **Create a version of each secret.** Values never pass through Terraform, a file, or an
    agent (D-089):
@@ -573,6 +643,10 @@ Each step needs the one before it.
      --zone europe-west2-a --project fetchpep-dev | grep fetchpep-startup
    ```
 
+   The first boot is not quick — it formats a disk, pulls two images over NAT and downloads
+   Compose. Give it a few minutes and repeat the command until the last line is `up` or an
+   error.
+
    ```
    verify: the last line reads   fetchpep-startup: up
    ```
@@ -591,6 +665,56 @@ Each step needs the one before it.
 
    Then `http://localhost:7351` for the console, and 7350 for the doors. Whoever runs it has
    to be in `tunnel_users` (step 2).
+
+8. **Prove it end to end.** This is brief B-002's *proven when*, and it is the only step that
+   shows the whole thing working rather than each piece being present. Leave the forward from
+   step 7 open in one Cloud Shell tab and run this in another.
+
+   The HTTP key is a secret, so it comes out of Secret Manager into a shell variable and is
+   never typed, pasted or echoed:
+
+   ```
+   HTTP_KEY=$(gcloud secrets versions access latest --secret nakama-http-key --project fetchpep-dev)
+   ```
+
+   **Publish release 1.** The payload is a JSON *string* containing the file, which is what
+   Nakama's HTTP RPC expects:
+
+   ```
+   PAYLOAD=$(python3 -c "import json;print(json.dumps(open('services/nakama/releases/release-0001.json').read()))")
+   curl -s -X POST "http://127.0.0.1:7350/v2/rpc/publish_release?http_key=$HTTP_KEY" \
+     -H 'Content-Type: application/json' -d "$PAYLOAD"
+   ```
+
+   **Read it back:**
+
+   ```
+   curl -s -X POST "http://127.0.0.1:7350/v2/rpc/read_catalogue?http_key=$HTTP_KEY" \
+     -H 'Content-Type: application/json' -d '""'
+   ```
+
+   **And check the door log wrote the row**, over the same forward, from inside the VM:
+
+   ```
+   gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev \
+     --tunnel-through-iap --command \
+     'sudo docker exec fetchpep-nakama-postgres-1 psql -U nakama -d nakama -X \
+        -c "SELECT id, door, outcome, idempotency_key FROM directory.door_log ORDER BY id"'
+   ```
+
+   ```
+   verify: publish_release  →  {"outcome":"applied","release":1,"phases":1,"species":1,
+                                "coats":1,"door_log_id":1}
+           read_catalogue   →  count 1, the Reedling, artist and creator Joshua
+           door_log         →  one row, publish / applied / release-0001
+   ```
+
+   A second identical `publish_release` must return `{"outcome":"duplicate",…}` and write
+   nothing. That is the idempotency key doing its job, and it is worth one extra call to see.
+
+   If all three pass, the VM is doing what brief B-002 asked for. Anything else: the
+   containers' logs, over the forward, with
+   `sudo docker logs fetchpep-nakama-nakama-1 --tail 50`.
 
 ## 22. Rotating a secret
 
