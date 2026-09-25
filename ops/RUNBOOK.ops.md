@@ -336,6 +336,17 @@ PR (D-069). Anything else the brief did not ask for is a question on the issue o
 Operations runs everything here, in Cloud Shell, with George signed in (D-064, D-067). The
 developer never applies. Nothing in this part is automatic.
 
+**Before pasting anything into Cloud Shell, once per session:**
+
+```
+bind 'set enable-bracketed-paste off'
+```
+
+Otherwise a pasted multi-line command can pick up a stray `~` at the end of a line — the
+terminal's bracketed-paste markers arriving as text. Every command below is meant to be
+pasted, several run over more than one line, and a `~` inside a `-target` list or a secret
+name fails in a way that reads as a Terraform or gcloud problem rather than a paste one.
+
 ## 20. Before anything: the two workspaces, and the tool
 
 ### The repository
@@ -446,9 +457,15 @@ Each step needs the one before it.
    gcloud services enable cloudresourcemanager.googleapis.com iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com pubsub.googleapis.com secretmanager.googleapis.com compute.googleapis.com iap.googleapis.com oslogin.googleapis.com logging.googleapis.com monitoring.googleapis.com --project fetchpep-dev
    ```
 
-   **George may have run this already, and it is safe to repeat.** Enabling a service that
-   is already on is a no-op. Running it twice costs a few seconds and nothing else, so if in
-   doubt, run it.
+   **Done, 25 Sep, ~17:10 BST.** George ran it, and a filtered
+   `gcloud services list --enabled --project fetchpep-dev` returned exactly those eleven. So
+   the first apply starts with this step already behind it. Repeating it is a no-op and
+   costs a few seconds, so if in doubt on any later run, run it.
+
+   It was also not busywork: before he ran it, **IAM, Resource Manager, Compute, Pub/Sub,
+   STS, IAP, OS Login and IAM Credentials were all off.** Eight of the eleven. Step 1 would
+   have failed on the first service account, which is what the PR #25 round-3 review
+   predicted and what this step exists to prevent.
 
    **The kill switch's own services are deliberately not in that list** — no
    `billingbudgets`, `cloudbilling`, `cloudfunctions`, `cloudbuild`, `run`, `eventarc`,
