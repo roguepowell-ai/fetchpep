@@ -1,0 +1,73 @@
+# Nakama server configuration — the template, with no secret in it (R-SEC-01).
+#
+# `render-config.sh` turns this into `nakama.runtime.yml` by replacing the seven @@TOKEN@@
+# placeholders with values read from Secret Manager. The rendered file is 0600, is never
+# committed, and is what the container actually reads. The placeholders are the only
+# difference between the two files.
+#
+# Three of the seven exist because Nakama has a default for them and the default is in its
+# published source: `session.encryption_key`, `session.refresh_encryption_key` and
+# `console.signing_key`. A signing key everybody has is not a signing key.
+#
+# Secrets are in the file rather than on the command line on purpose: a flag is visible in
+# `ps` to every process on the host and lands in any process listing that gets logged
+# (R-SEC-06).
+
+# The node's name, not the VM's. Nakama caps it at 16 characters and refuses to start past
+# that, so it cannot be the VM's name `fetchpep-dev-nakama` (19).
+name: fetchpep-nakama
+data_dir: /nakama/data
+
+logger:
+  level: INFO
+  stdout: true
+
+# The database is on the same host, on the compose network. It is never published to the
+# host, so nothing outside the container network can reach it.
+database:
+  address:
+    - "nakama:@@DB_PASSWORD@@@postgres:5432/nakama?sslmode=disable"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+
+# Bound to 0.0.0.0 *inside the container's own network namespace* — the container has no
+# other interface. What limits reach is the host side: docker-compose.yml publishes both
+# ports on 127.0.0.1 only, the VM has no external IP (network.tf), and the only inbound
+# rule is SSH from Google's IAP range. Binding 127.0.0.1 here instead would mean "reachable
+# only from inside this container", which is not a control, it is an outage.
+socket:
+  port: 7350
+  server_key: "@@SERVER_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+
+# Never exposed (`.claude/rules/nakama.md`). Published on 127.0.0.1 only; reached by an SSH
+# port-forward over IAP, never from the network.
+console:
+  port: 7351
+  username: "admin"
+  password: "@@CONSOLE_PASSWORD@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+  # Signs the console's own tokens. Left unset, Nakama uses a value published in its own
+  # source, and anyone who reaches 7351 can then mint an admin token without the password
+  # above — which would make the password decorative.
+  signing_key: "@@CONSOLE_SIGNING_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+
+# The game logic (D-062). `path` holds the modules; `js_entrypoint` is relative to it.
+# docker-compose.yml mounts ./build there, so the file is build/index.js in the repo and
+# modules/index.js in the container.
+runtime:
+  path: /nakama/data/modules
+  js_entrypoint: "index.js"
+  http_key: "@@HTTP_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+
+# No chat, no friends, no groups (rules/NON-NEGOTIABLES.rule.md). Nakama has no single
+# switch for this; what keeps them out is that no client is written against them and the
+# socket is not reachable from the internet. Turning off the features Nakama does gate:
+social:
+  steam:
+    app_id: 0
+
+session:
+  token_expiry_sec: 7200
+  refresh_token_expiry_sec: 604800
+  # The same reasoning as console.signing_key: unset, these take Nakama's published
+  # defaults, and a session token signed with a published key is a session anyone can forge
+  # — any player, as any other player, without signing in (R-SEC-02).
+  encryption_key: "@@SESSION_ENCRYPTION_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+  refresh_encryption_key: "@@SESSION_REFRESH_ENCRYPTION_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot

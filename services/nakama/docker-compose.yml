@@ -1,0 +1,88 @@
+# Nakama and PostgreSQL on one host (D-055, D-063). Image tags are exact, never a moving
+# tag (ops/VERSIONS.ops.md rule 1).
+#
+# Nothing here is reachable from outside the VM. Postgres publishes no port at all and is
+# reachable only on the compose network; Nakama's two ports are published on 127.0.0.1, so
+# they are reachable only from the VM itself. The VM has no external IP and its only
+# inbound rule is SSH from Google's IAP range (infra/dev/network.tf). To reach the console
+# or the API, forward a port over SSH — see ops/RUNBOOK.ops.md.
+#
+# Reading it locally: `NAKAMA_* ` values come from `.env` (see `.env.example`), and
+# `nakama.runtime.yml` has to be rendered first with `render-config.sh`.
+
+name: fetchpep-nakama
+
+volumes:
+  pgdata:
+
+services:
+  postgres:
+    image: postgres:16.15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nakama
+      POSTGRES_USER: nakama
+      POSTGRES_PASSWORD: ${NAKAMA_DB_PASSWORD:?set NAKAMA_DB_PASSWORD in .env}
+      # Corruption that is not detected is corruption that gets backed up.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      # A named volume. On the VM `docker-compose.vm.yml` replaces this with a bind to the
+      # database's own disk, because there the database must not live on the boot disk —
+      # a boot disk is a thing that gets replaced (infra/dev/vm_nakama.tf).
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `-h 127.0.0.1`, not the default. Without it pg_isready checks the Unix socket, and
+      # the image's entrypoint runs a temporary server on the socket *while it initialises*
+      # — with TCP not listening yet. The container would go healthy during initdb, migrate
+      # would connect over TCP, fail, and stop for good on `restart: "no"`, leaving Nakama
+      # waiting for a service that never comes.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U nakama -d nakama"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    # No `ports`. Deliberate: the database is never published, not even on loopback.
+
+  # Our migrations, once, in order, recorded in directory.schema_migration. Runs to
+  # completion before Nakama starts. Nakama's own tables are migrated separately by
+  # `nakama migrate up` in the nakama service — the two never touch each other's tables
+  # (D-079).
+  migrate:
+    image: postgres:16.15
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: nakama
+      PGDATABASE: nakama
+      PGPASSWORD: ${NAKAMA_DB_PASSWORD:?set NAKAMA_DB_PASSWORD in .env}
+    volumes:
+      - ./migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "/migrations/run.sh"]
+
+  nakama:
+    image: heroiclabs/nakama:3.40.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        /nakama/nakama migrate up --config /nakama/data/nakama.runtime.yml
+        exec /nakama/nakama --config /nakama/data/nakama.runtime.yml
+    volumes:
+      - ./nakama.runtime.yml:/nakama/data/nakama.runtime.yml:ro
+      - ./build:/nakama/data/modules:ro
+    ports:
+      - "127.0.0.1:7350:7350"   # client API — loopback on the VM only
+      - "127.0.0.1:7351:7351"   # console — loopback on the VM only
+    healthcheck:
+      test: ["CMD", "/nakama/nakama", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 30

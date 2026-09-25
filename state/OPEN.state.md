@@ -71,6 +71,114 @@ tools only.** A fix means matching on Bash commands as well, which is a decision
 that parses shell has its own failure mode, and refusing every write-shaped Bash command
 would stop ordinary work.
 
+**Update, 25 Sep — a second, separate hole, found and closed.** The guard was also broken by
+the *working directory*, which is not the same bug and had nothing to do with Bash.
+`.claude/settings.json` ran it as `node hooks/guard-write.mjs`, a relative path, so from any
+subdirectory the hook failed to load — and [certain] Claude Code treats a hook that exits 1
+as a non-blocking error, so **every write was allowed**. Inside the hook, two more things
+were relative to the working directory. Measured from `infra/dev` against the version on
+main: a `george-only` file was still **blocked** (the `rules/` prefix test failed but the
+frontmatter arm reads the absolute path and caught it), and a **banned term was allowed**,
+because the word list was opened by a relative path, was not found, and an empty list
+matches nothing. Fixed in PR #20: the command uses `$CLAUDE_PROJECT_DIR`, and the hook
+anchors on its own location instead of `process.cwd()`. Proven from four working
+directories, one of them outside the repo. O-73 itself — that Bash writes are not seen at
+all — stands.
+
+**O-74 · `services/nakama/build/index.js` is committed and nothing checks it matches `src/`.**
+Nakama loads one JavaScript file. The VM has no build step and there is no image registry
+of ours (the kill switch's Artifact Registry repository is the kill switch's, D-070), so
+`infra/dev/vm_nakama.tf` reads the built file with `file()` and delivers it in instance
+metadata. That works and is reproducible — `tsconfig.json` lists its inputs in order rather
+than globbing, so the same sources give the same bytes — but nothing stops someone editing
+`src/` without rebuilding, and the VM would then run the older module with no sign of it.
+Proposed check: run `npm run build`, fail if `git diff --exit-code build/` is non-empty. It
+is a new gate, and promoting a rule up a tier is itself a decision
+(`rules/WORKING-METHOD.rule.md`), so it needs an ID. The alternatives are both bigger: build
+on the VM at boot, or push an image to Artifact Registry and pull it.
+
+**O-75 · The two migrations now exist in two places.**
+`spec/DATA-MODEL.spec.md` holds them as fenced SQL and `services/nakama/migrations/` holds
+them as files. Brief #13 says to take the files from the spec, and they were extracted with
+the same reader `checks/skeleton.test.mjs` uses, so today they are equal. Nothing keeps
+them so. If they drift, the spec test proves one thing and the VM runs another. Same shape
+as O-74 and the same cost: a check is a tier promotion and needs an ID. The other way out is
+for the spec to point at the files instead of carrying the SQL — a bigger edit than it
+sounds, because the spec's *Evidence* section reads the SQL out of itself.
+
+**O-76 · `directory.door_log` cannot record the outcome it defines.**
+`outcome` allows `'duplicate'`, and `idempotency_key` is `UNIQUE`. A second call under a key
+already used therefore cannot be written at all — the index refuses the insert before the
+outcome matters. `publish_release` handles it by reading the first call back and returning
+`duplicate` to the caller without writing, which is the right behaviour and leaves the
+`'duplicate'` value unreachable. One of the two should go: the outcome, or the unique index
+in favour of one that allows repeats. Found building #13. Schema, so
+`spec/DATA-MODEL.spec.md`, and a migration if it changes.
+
+**O-77 · Where `invite-email-hmac-key` lives.**
+`spec/DATA-MODEL.spec.md` names five Secret Manager secrets and leaves this one's home to
+the VM brief. Brief #13 asks for four, and the four are built. The fifth is different in
+kind: D-080 has the website compute the HMAC of an invited address and the game compute the
+same HMAC at sign-in, so both sides need the same key — and there is no website, no decision
+about where it runs, and no Cloudflare account (`ops/INFRA.ops.md`). A secret with one
+holder and no second holder cannot have its sharing designed yet. Asked on issue #13.
+
+**O-78 · Docker Hub is an unauthenticated dependency between a reboot and a running game.**
+The VM pulls `heroiclabs/nakama:3.40.0` and `postgres:16.15` from Docker Hub at boot,
+through Cloud NAT, with no account. [certain] Docker Hub rate-limits anonymous pulls by IP.
+A reboot in a busy hour can fail to start the service, and the failure reads as a broken VM
+rather than as a quota. Both tags are exact, so what is at risk is availability, not what
+gets run. The fix is to mirror both images into Artifact Registry in `fetchpep-dev` and pull
+from there: a new repository, a new cost line and a decision, so not in #13.
+
+**O-79 · What `infra/dev` cannot prove without an apply.**
+The developer never applies (D-067), so five things in PR #20 are reasoned from
+documentation rather than seen working. Listed here so the first apply is read as a test
+rather than a formality, and so a failure is recognised instead of debugged from scratch:
+1. **`/var` is `noexec` on Container-Optimized OS** [certain, from the CIS benchmark for
+   COS], so the Compose binary gets `app_dir/bin` its own `mount --bind` plus
+   `remount,exec`. The startup script runs `docker-compose version` straight afterwards and
+   exits with the mount options in the log if it did not take. Unproven until a VM boots.
+2. **The apply runner's role set.** Nine roles and a custom one, chosen narrow on purpose.
+   A missing permission fails the apply with the permission named. The fix is another named
+   role, never `roles/editor`.
+3. **The Secret Manager service agent.** `infra/bootstrap/workload_identity.tf` grants
+   `service-<number>@gcp-sa-secretmanager.iam.gserviceaccount.com` publisher on the rotation
+   topic by its well-known address. [likely] The agent is created the first time the service
+   is used, and a binding to a principal that does not exist is refused. `ops/RUNBOOK.ops.md`
+   Part 5 step 0 creates it first with `gcloud beta services identity create`; if the apply
+   still refuses the binding, that step did not take.
+4. **Instance metadata size.** Seven files go up as metadata, the two migrations being most
+   of it — about 55 KB against a 256 KB limit per key and 512 KB in total. Comfortable, but
+   it is a ceiling that grows with every migration, and migration 0003 is already coming
+   (D-091).
+5. **The HCP Terraform workspace's working directory** must be `infra/dev` with the whole
+   repository uploaded, because `vm_nakama.tf` reads `../../services/nakama/...`. Written up
+   in `ops/RUNBOOK.ops.md` Part 5, step 20.
+
+**O-81 · `.claude/settings.json` has no tier in `CLAUDE.md` section 6.**
+It is the file that decides whether the write guard runs at all, and section 6's table says
+nothing about `.claude/`. The nearest thing to a rule is O-39, which records that the remote
+tools could not write there and George placed the files by hand. The developer edited it in
+PR #20 — the hook was failing to load, and the PM's instruction on issue #13 was to fix it
+"in `.claude/settings.json` or the hook itself, whichever is right. It's your call (D-069)".
+That instruction covers the one edit; it does not settle the tier. Raised by the PR #20
+re-review. **Proposed:** add a row reading `` `.claude/` | `claude-writes`, except
+`settings.local.json`, which is per-seat and untracked ``, on the grounds that the guard's
+own wiring is the developer's to keep working and CI plus the reviewer are the backstop. The
+opposite reading is just as defensible — a guard whose subject can edit its own wiring is
+weaker than one that cannot — and that one makes it `george-only`. `CLAUDE.md` is George's
+file either way, so this is a proposal and nothing more.
+
+**O-80 · Rotation notices go to a topic nothing listens to.**
+D-089 gives every secret a rotation period. [certain] Secret Manager's rotation does not
+create a version — it publishes a notice to `fetchpep-dev-secret-rotation` saying one is
+due, and the rotation itself is the procedure in `ops/RUNBOOK.ops.md` Part 5, run by a
+person. Nothing is subscribed to that topic, so the notice reaches nobody: the schedule
+currently records an intention rather than prompting anyone. Same shape as O-70, where a
+kill-switch error only shows in a log. Both want a notification channel, which wants an
+email address in Terraform, which is one decision covering both.
+
 ## Blocking the world map
 
 - **O-2 · Q43 — resolved 24 Sep by D-051.** The game has no regions. The shared instance is
@@ -149,10 +257,17 @@ Ordered. Nothing below moves until the item above it does.
 - **O-50 to O-53 · resolved 24 Sep by D-062 to D-065.** Game logic in Nakama; PostgreSQL
   on the VM; HCP Terraform with one Cloud Shell bootstrap; Cloudflare Tunnel and R2
 
-**O-54 · Nakama's own tables, or ours — resolved 24 Sep by D-079 (split).** Nakama holds
-accounts, sign-in and sessions; all game data lives in `directory` and `shard_gi`. Still
-unverified, and carried by D-079 to the VM brief: that the TypeScript runtime can write to
-those tables. The original item: D-063 puts one PostgreSQL on the VM. Nakama
+**O-54 · Nakama's own tables, or ours — resolved 24 Sep by D-079 (split); the last part
+verified 25 Sep.** Nakama holds
+accounts, sign-in and sessions; all game data lives in `directory` and `shard_gi`. What
+D-079 carried to the VM brief — that the TypeScript runtime can write to those tables — is
+now proven, on Nakama 3.40.0 against PostgreSQL 16.15. **Evidence** (brief #13, in the PR):
+the module logs `fetchpep: module loaded, 2 migration(s) applied` at start, which is a
+`nk.sqlQuery` against `directory.schema_migration`; `publish_release` wrote a release, a
+phase, a species, a coat and a `directory.door_log` row in one statement and returned
+`{"outcome":"applied",…,"door_log_id":1}`; `read_catalogue` read them back. The three
+schemas sit side by side in one database — `public` 20 tables (Nakama's own),
+`directory` 20, `shard_gi` 23. The original item: D-063 puts one PostgreSQL on the VM. Nakama
 creates and migrates its own tables; the seam (D-051) and the append-only ledger need real
 SQL tables. Proposed: Nakama's tables for accounts and sign-in only; `directory` and
 `shard_gi` for all game data, written from the TypeScript modules. Verify how the
@@ -182,10 +297,13 @@ from connecting GitHub as a VCS provider, and only the second one makes runs hap
 pull request. Connecting it is an OAuth grant against the GitHub account and is George's to
 approve.
 
-**O-32 · There is no `infra/` directory and no `.tf` file — built on the B-001 branch.**
-`infra/bootstrap/` holds `versions.tf` and `kill_switch.tf`; `terraform validate` output is
-under B-001 above. Closes when PR #9 merges; until then `main` still has no `infra/`. `workload_identity.tf`, named in `spec/DATA-MODEL.spec.md`, is
-not written: B-001 covers the kill switch only, so the trust setup needs its own brief.
+**O-32 · resolved.** `infra/bootstrap/` holds `versions.tf`, `kill_switch.tf` and, since
+brief #13, `workload_identity.tf` — the trust setup B-001 left out. `infra/dev/` holds the
+network, the VM, the snapshot schedule, the secret containers and their inputs and outputs.
+Nothing is applied: both stacks are Manual apply and the apply is operations' (D-067).
+**Evidence** in the #13 PR: `terraform fmt -check -recursive infra` exits 0, and
+`terraform validate` returns `Success! The configuration is valid.` in both stacks.
+`infra/dev/.terraform.lock.hcl` is committed, locked for `linux_amd64` and `windows_amd64`.
 
 **O-67 · The `fetchpep-bootstrap` workspace must run in local execution mode.**
 `infra/bootstrap/versions.tf` stores state in HCP Terraform (D-064) under a `cloud` block.
@@ -278,11 +396,16 @@ it is behind O-31 and O-32, which is the actual reason this is urgent rather tha
 the guard is George's existing budget alerts, which warn and do not stop spend. The code is
 PR #9. This item closes when the kill switch is applied before launch, not before the VM.
 
-**O-34 · Terraform CLI is extracted, not installed.**
-`terraform.exe` sits loose in `Downloads\terraform_1.16.4_windows_amd64\`. It is not on
-`PATH`, so `terraform` resolves from no shell. Only needed for local `plan`; HCP Terraform
-runs remotely. Not a blocker, but `ops/VERSIONS.ops.md` records a version that no command
-can currently confirm.
+**O-34 · Terraform CLI is extracted, not installed — restated for the Cloud Shell seat.**
+The original: `terraform.exe` sat loose in `Downloads\terraform_1.16.4_windows_amd64\` on
+the PC, not on `PATH`. That seat is retired (D-085). On the Cloud Shell seat `terraform` is
+not installed either — `/google/bin/terraform` is a stub that prints installation
+instructions — so each session fetches `1.16.4` into its own scratch folder and checks it
+against HashiCorp's `SHA256SUMS` before running it (`terraform_1.16.4_linux_amd64.zip: OK`,
+25 Sep). That is a per-session download, not an install: D-085 puts installs in a scratch
+folder, and an install anywhere else is a stop. So the version is confirmable by command
+again, and the item is now about whether a per-session fetch is the shape George wants
+rather than about a loose binary.
 
 ## Blocking the first build
 

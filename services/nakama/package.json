@@ -1,0 +1,14 @@
+{
+  "name": "fetchpep-nakama",
+  "private": true,
+  "description": "Inkfold game logic, run as TypeScript modules inside open-source Nakama (D-062).",
+  "license": "UNLICENSED",
+  "author": "George Powell",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

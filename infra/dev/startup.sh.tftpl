@@ -1,0 +1,212 @@
+#!/bin/bash
+# Runs as root at every boot (Container-Optimized OS honours the startup-script key).
+# Idempotent: a reboot re-runs it and nothing is created twice.
+#
+# **The order below is the load-bearing part, and two faults came out of getting it wrong.**
+# The containers are `restart: unless-stopped`, so Docker starts them at boot on its own,
+# before this script runs a line. That meant:
+#
+#   - PostgreSQL could start before the data disk was mounted. Its bind source did not exist
+#     on the boot disk, Docker created it, and the entrypoint ran initdb into it. Mounting
+#     the disk afterwards hid that directory from everything except the process already
+#     using it, so the server came up healthy and empty with the real database sitting
+#     unmounted. Nothing would have looked wrong.
+#   - A rotated secret never reached Nakama. The script rendered a new nakama.runtime.yml,
+#     but `up -d` does not recreate a container whose Compose configuration has not changed,
+#     and the *contents* of a bind-mounted file are not part of that configuration. Nakama
+#     kept the old keys.
+#
+# So: stop everything first, mount, then bring it up from nothing. `down` at the top is what
+# makes the rest of the script mean what it says.
+#
+# No secret is ever echoed, none is ever passed as an argument, and there is no `set -x`.
+# Anything printed here goes to the serial console and to Cloud Logging, and logs are a data
+# store (R-SEC-06).
+set -euo pipefail
+
+APP_DIR="${app_dir}"
+PGDATA_DIR="${pgdata_dir}"
+COMPOSE_VERSION="${compose_version}"
+COMPOSE_SHA256="${compose_sha256}"
+PROJECT="${project_id}"
+SECRET_NAMES="${secret_names}"
+
+COMPOSE="$APP_DIR/bin/docker-compose"
+FILES="-f docker-compose.yml -f docker-compose.vm.yml"
+
+log() { echo "fetchpep-startup: $1"; }
+
+md() {
+  curl -sf -H 'Metadata-Flavor: Google' \
+    "http://metadata.google.internal/computeMetadata/v1/$1"
+}
+
+mkdir -p "$APP_DIR/migrations" "$APP_DIR/build" "$APP_DIR/bin"
+cd "$APP_DIR"
+
+# ---------------------------------------------------------------- somewhere to execute
+# [certain] Container-Optimized OS mounts /var `noexec` — it is part of the image's
+# hardening, and the CIS benchmark for COS checks for it. A binary written anywhere under
+# /var therefore fails with "Permission denied" whatever its mode is.
+#
+# So `bin/` gets its own bind-mount with exec, and only `bin/`: the files fetched below came
+# off the network and stay on a noexec mount. A bind-mount does not survive a reboot, which
+# is why this runs every time. It has to run before the `down` below, because that needs the
+# Compose binary.
+if findmnt -no OPTIONS --target "$APP_DIR/bin" | grep -q noexec; then
+  log "giving $APP_DIR/bin an exec mount"
+  mount --bind "$APP_DIR/bin" "$APP_DIR/bin"
+  mount -o remount,bind,exec,nosuid,nodev "$APP_DIR/bin"
+fi
+
+# ---------------------------------------------------------------- stop what Docker started
+# Before the mount, and before anything else. Not `down -v`: the named volume is not used on
+# the VM, and removing volumes is never what a reboot should do.
+if [ -x "$COMPOSE" ] && [ -f docker-compose.yml ] && [ -f docker-compose.vm.yml ]; then
+  log "stopping containers Docker restarted at boot"
+  "$COMPOSE" $FILES down --remove-orphans || true
+fi
+
+# ---------------------------------------------------------------- the database disk
+# Its own disk so that replacing the VM does not take the database with it
+# (vm_nakama.tf). Formatted once, on first boot, and never again — `-F` is deliberately
+# absent from mkfs so that a bug here cannot wipe a disk that already holds data.
+DEV=/dev/disk/by-id/google-pgdata
+mkdir -p "$PGDATA_DIR"
+if ! mountpoint -q "$PGDATA_DIR"; then
+  if ! blkid "$DEV" >/dev/null 2>&1; then
+    log "formatting the database disk (first boot)"
+    mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard "$DEV"
+  fi
+  log "mounting the database disk"
+  mount -o discard,defaults "$DEV" "$PGDATA_DIR"
+fi
+
+# Nothing starts without it. An unmounted data disk is the one failure that would otherwise
+# look like success.
+if ! mountpoint -q "$PGDATA_DIR"; then
+  log "$PGDATA_DIR is not a mount point — refusing to start"
+  exit 1
+fi
+
+# A subdirectory, not the mount root: ext4 puts lost+found at the root and PostgreSQL
+# refuses to initialise a data directory that is not empty.
+mkdir -p "$PGDATA_DIR/data"
+
+# ---------------------------------------------------------------- the service's files
+# Each file is its own metadata key, so nothing has to be escaped into a shell heredoc and
+# the plan shows each file's contents as its own diff.
+log "writing files from instance metadata"
+md instance/attributes/fetchpep-compose        > docker-compose.yml
+md instance/attributes/fetchpep-compose-vm     > docker-compose.vm.yml
+md instance/attributes/fetchpep-nakama-config  > nakama.yml
+md instance/attributes/fetchpep-render-config  > render-config.sh
+md instance/attributes/fetchpep-migrate-run    > migrations/run.sh
+md instance/attributes/fetchpep-migration-0001 > migrations/0001_directory.sql
+md instance/attributes/fetchpep-migration-0002 > migrations/0002_shard_gi.sql
+md instance/attributes/fetchpep-module         > build/index.js
+
+# ---------------------------------------------------------------- docker compose
+# COS ships Docker but not Compose, and /usr is read-only, so the plugin cannot be installed
+# where Docker looks for one. The standalone binary does the same job. Exact version,
+# checksum verified before it is made executable (R-SEC-04) — a download at boot is a supply
+# chain, and an unverified one is somebody else's.
+if [ ! -x "$COMPOSE" ]; then
+  log "installing docker compose $COMPOSE_VERSION"
+  curl -sfL -o "$COMPOSE.tmp" \
+    "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+  echo "$COMPOSE_SHA256  $COMPOSE.tmp" | sha256sum -c -
+  chmod 0755 "$COMPOSE.tmp"
+  mv "$COMPOSE.tmp" "$COMPOSE"
+fi
+
+# Proves the exec mount above actually took. If it did not, this fails here with a clear
+# line in the log rather than as a container that never starts.
+if ! "$COMPOSE" version >/dev/null 2>&1; then
+  log "$COMPOSE will not run — is $APP_DIR/bin still noexec?"
+  findmnt -no TARGET,OPTIONS --target "$APP_DIR/bin" || true
+  exit 1
+fi
+
+# On the first boot the binary did not exist when the `down` above was tried. Everything is
+# stopped by now anyway on a first boot, but say it plainly rather than assume it.
+"$COMPOSE" $FILES down --remove-orphans >/dev/null 2>&1 || true
+
+# ---------------------------------------------------------------- the secrets
+# The VM's service account may read exactly these and nothing else (secrets.tf).
+log "reading secrets"
+TOKEN=$(md instance/service-accounts/default/token \
+  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+if [ -z "$TOKEN" ]; then
+  log "no access token from the metadata server"
+  exit 1
+fi
+
+secret() {
+  curl -sf -H "Authorization: Bearer $TOKEN" \
+    "https://secretmanager.googleapis.com/v1/projects/$PROJECT/secrets/$1/versions/latest:access" \
+    | sed -n 's/.*"data": *"\([^"]*\)".*/\1/p' \
+    | base64 -d
+}
+
+# name -> NAME, so nakama-db-password becomes NAKAMA_DB_PASSWORD.
+env_name() { echo "$1" | tr 'a-z-' 'A-Z_'; }
+
+umask 077
+: > .env.tmp
+for s in $SECRET_NAMES; do
+  # invite-email-hmac-key has no consumer in the container yet (O-77); it is read here so
+  # that a missing version is caught at boot rather than on the day something needs it.
+  printf '%s=%s\n' "$(env_name "$s")" "$(secret "$s")" >> .env.tmp
+done
+
+# A secret that came back empty writes an empty value, and an empty password is worse than a
+# missing one because the server starts.
+if grep -qE '^[A-Z_]+=$' .env.tmp; then
+  log "a secret came back empty — is there a version of each one? Names, not values:"
+  grep -E '^[A-Z_]+=$' .env.tmp | cut -d= -f1
+  rm -f .env.tmp
+  exit 1
+fi
+
+printf 'PGDATA_PATH=%s\n' "$PGDATA_DIR/data" >> .env.tmp
+mv .env.tmp .env
+chmod 600 .env
+
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+sh render-config.sh "$APP_DIR/nakama.runtime.yml"
+
+# ---------------------------------------------------------------- start
+# PostgreSQL first, on its own, because of the step after it. Everything was brought down
+# above, so this is a new container reading the config as it is now.
+log "starting the database"
+"$COMPOSE" $FILES up -d --wait postgres
+
+# [certain] POSTGRES_PASSWORD is read by the image's entrypoint only when it initialises an
+# empty data directory. On every later boot the role keeps whatever password it already had,
+# so rotating nakama-db-password would change .env, change the address Nakama dials, and
+# leave the role unchanged — Nakama would then fail to authenticate against its own
+# database. This reconciles the two, which makes that rotation a reboot.
+#
+# It runs here, with PostgreSQL up and **Nakama not yet started**, so no connection is
+# pulled out from under a running server. It goes over the container's Unix socket, where
+# the official image trusts local connections, so it needs no password to set one. The
+# statement is on stdin, never in argv, so the new value is not visible in `ps` inside the
+# container (R-SEC-06) — and `log_min_error_statement = panic` for this session only, so
+# that a failure cannot write the statement, password and all, into the PostgreSQL log.
+log "reconciling the database role with the secret"
+{
+  printf "SET log_min_error_statement = panic;\n"
+  printf "ALTER ROLE nakama WITH PASSWORD '%s';\n" "$NAKAMA_DB_PASSWORD"
+} | "$COMPOSE" $FILES exec -T postgres psql -q -v ON_ERROR_STOP=1 -U nakama -d nakama -f -
+
+# `--force-recreate` even though `down` already removed everything: the contents of a
+# bind-mounted file are not part of a container's Compose configuration, so without it a
+# container that happened to survive would keep the old nakama.runtime.yml and a rotation
+# would silently not take effect. Belt as well as braces, and cheap.
+log "starting the rest"
+"$COMPOSE" $FILES up -d --wait --force-recreate
+log "up"

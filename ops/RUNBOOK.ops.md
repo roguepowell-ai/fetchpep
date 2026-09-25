@@ -328,3 +328,151 @@ or a spend goes to George. A conflict with a decision follows `CLAUDE.md` sectio
 positions and the IDs each cites go to `state/OPEN.state.md`, and the push-back goes on the
 PR (D-069). Anything else the brief did not ask for is a question on the issue or the PR
 (section 17).
+
+---
+
+# Part 5 — The server: applying it, and rotating a secret
+
+Operations runs everything here, in Cloud Shell, with George signed in (D-064, D-067). The
+developer never applies. Nothing in this part is automatic.
+
+## 20. Execution mode: the two workspaces differ
+
+| Workspace | Execution mode | Why |
+|---|---|---|
+| `fetchpep-bootstrap` | **Local** | It creates the trust that everything else authenticates with, so it cannot authenticate with it. It runs in Cloud Shell under George's own sign-in and only the state is remote (O-67) |
+| `fetchpep-dev` | **Remote** | [likely] HCP Terraform's dynamic provider credentials are minted for the run, in HCP Terraform. A local run has no such token and would need a key instead, which is the thing D-064 removes |
+
+The organisation default stays Remote. `fetchpep-bootstrap` is the exception, set by hand.
+
+**`fetchpep-dev`'s working directory must be `infra/dev`.** [likely] `vm_nakama.tf` reads
+`../../services/nakama/...` with `file()`, so the whole repository has to be in the run's
+upload, with the stack one directory inside it. A workspace configured with `infra/dev` as
+its *root* rather than its working directory would upload only that folder, and every
+`file()` would fail at plan.
+
+## 21. Apply order
+
+Each step needs the one before it. Steps 1 and 3 are George's.
+
+0. **Create Secret Manager's service agent, before anything else.** [likely] The agent is
+   created the first time the service is used, and the bootstrap stack grants it publisher
+   on the rotation topic — a binding to a principal that does not exist yet is refused. One
+   command, and it is safe to repeat:
+
+   ```
+   gcloud beta services identity create --service=secretmanager.googleapis.com \
+     --project fetchpep-dev
+   ```
+
+   ```
+   verify: it prints   service-424117215837@gcp-sa-secretmanager.iam.gserviceaccount.com
+   ```
+1. **`fetchpep-bootstrap`, locally.** Creates the workload identity pool and provider, the
+   plan and apply service accounts, the two custom roles, the VM's own service account and
+   the secret rotation topic. The kill switch is in the same stack but a separate question
+   (D-070, D-072).
+
+   **Read the plan before applying.** It should show **no change to any kill-switch
+   resource**. Nothing in this brief touches `kill_switch.tf`: its blob is `40496fa7ab17`
+   and `versions.tf`'s is `de0e78def58b`, the same on `main` as on the branch, and the last
+   commit to touch either is `f5261fb`, the third PR #9 review. Check with
+   `git rev-parse <ref>:infra/bootstrap/kill_switch.tf`. But the blob only says the file did
+   not change — the plan is the thing that says no kill-switch *resource* changed, and that
+   is what to read.
+2. **Set the workspace variables** on `fetchpep-dev`, from `terraform output
+   tfc_workspace_variables`: `TFC_GCP_PROVIDER_AUTH`, `TFC_GCP_WORKLOAD_PROVIDER_NAME`,
+   `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL`, `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL`. None is a
+   secret.
+3. **Get the secret containers made before the VM boots.** The containers must exist before
+   there are versions to put in them, and the VM refuses to start without a version of
+   every secret. Two ways, and which one is available depends on the workspace:
+
+   - `terraform apply -target=google_secret_manager_secret.nakama` — but [likely] HCP
+     Terraform refuses a CLI-driven apply on a workspace connected to VCS, and `fetchpep-dev`
+     is Remote.
+   - **The fallback, which always works:** apply the whole stack and let the first boot
+     fail. The startup script exits with `a secret came back empty` and the names, nothing
+     is half-configured, and step 4 then step 6's reboot finish the job.
+4. **Create a version of each secret.** Values never pass through Terraform, a file, or an
+   agent (D-089):
+
+   ```
+   for s in nakama-db-password nakama-server-key nakama-http-key \
+            nakama-console-password nakama-session-encryption-key \
+            nakama-session-refresh-encryption-key nakama-console-signing-key \
+            invite-email-hmac-key; do
+     openssl rand -base64 33 | tr -d '\n' | tr '+/' '-_' \
+       | gcloud secrets versions add "$s" --data-file=- --project fetchpep-dev
+   done
+   ```
+
+   `tr '+/' '-_'` is required, not cosmetic: every value must match `^[A-Za-z0-9_-]+$`. The
+   database address is a URL where a raw `@` or `:` changes which host is dialled, and
+   `render-config.sh` substitutes with `sed`. It refuses to render anything else.
+
+   ```
+   verify: gcloud secrets versions list <name> --project fetchpep-dev   →   one ENABLED
+   ```
+5. **Apply the rest**, with `tunnel_users` naming whoever needs to reach the VM:
+
+   ```
+   terraform apply -var 'tunnel_users=["user:<the address>"]'
+   ```
+6. **Watch the first boot.** The startup script is the whole of the install:
+
+   ```
+   gcloud compute instances get-serial-port-output fetchpep-dev-nakama \
+     --zone europe-west2-a --project fetchpep-dev | grep fetchpep-startup
+   ```
+
+   ```
+   verify: the last line reads   fetchpep-startup: up
+   ```
+7. **Reach it.** Both ports are on the VM's loopback, so a forward is the only way in:
+
+   ```
+   gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a \
+     --project fetchpep-dev --tunnel-through-iap -- -L 7350:localhost:7350
+   ```
+
+## 22. Rotating a secret
+
+[certain] Secret Manager's rotation schedule does **not** create a new version. It publishes
+a notice to `fetchpep-dev-secret-rotation` saying one is due. The rotation is this
+procedure, run by a person. The schedule is what stops it being forgotten.
+
+Same for every secret:
+
+```
+openssl rand -base64 33 | tr -d '\n' | tr '+/' '-_' \
+  | gcloud secrets versions add <name> --data-file=- --project fetchpep-dev
+
+gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev \
+  --tunnel-through-iap --command 'sudo reboot'
+```
+
+**`sudo reboot`, not `gcloud compute instances reset`.** [certain] `reset` is a power cut:
+it does not flush anything, and PostgreSQL comes back through crash recovery every time.
+A clean shutdown costs a few seconds and skips that. `stop` then `start` is equally fine.
+
+The reboot re-runs the startup script, which stops the containers, reads `latest`, rewrites
+`.env` and `nakama.runtime.yml`, and brings everything up **force-recreated** — which is
+what makes a rotation take effect rather than leaving the old value in a running container.
+Then disable the old version.
+
+What each one costs, which is the part worth knowing before starting:
+
+| Secret | What the rotation costs |
+|---|---|
+| `nakama-db-password` | Nothing beyond the restart. [certain] `POSTGRES_PASSWORD` only takes effect when the data directory is first created, so the role would otherwise keep its old password and Nakama would fail to authenticate against its own database. The startup script runs `ALTER ROLE` on every boot over the container's local socket to reconcile the two |
+| `nakama-server-key` | [certain] **Every installed client is locked out** until it ships a build carrying the new key. Rotate it with a client release, not on its own. Its 365-day period is a backstop against "with a release" meaning never |
+| `nakama-http-key` | Whatever calls the publish door needs the new value |
+| `nakama-console-password`, `nakama-console-signing-key` | The console asks again |
+| `nakama-session-encryption-key`, `nakama-session-refresh-encryption-key` | [certain] Every player signs in again. Tokens live two hours, so the cost is one sign-in |
+| `invite-email-hmac-key` | Not a restart-and-done. `directory.fold_invite.hmac_key_version` records which version made each row, so open invites stay checkable: add the version, raise `hmac_key_version` for new invites, and keep the old version enabled until no open invite refers to it. It also has a second holder that does not exist yet — O-77 |
+
+```
+verify: gcloud secrets versions list <name> --project fetchpep-dev   →   the new one ENABLED
+        the serial output ends   fetchpep-startup: up
+```

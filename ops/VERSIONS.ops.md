@@ -20,14 +20,17 @@ version" does not work — this does, because it is told rather than remembered.
 | Unity CLI | `TBD` | not pinnable | Installed from the **beta** channel |
 | Node | `TBD` | `.nvmrc` | |
 | pnpm | `TBD` | `packageManager` in `package.json` | |
-| Terraform | `1.16.4` | `infra/.terraform-version` · `required_version` in each stack | Extracted binary in Downloads, not on `PATH` (O-34). Cloud Shell must run the same version |
+| Terraform | `1.16.4` | `infra/.terraform-version` · `required_version` in each stack | Not installed on the Cloud Shell seat: the binary is fetched into the session's scratch folder, checksum-checked against HashiCorp's `SHA256SUMS`, and run from there (D-085). O-34 is the same gap on the retired PC seat |
 | Terraform `hashicorp/google` | `8.4.0` | `versions.tf` · `.terraform.lock.hcl` | Locked for `linux_amd64` (Cloud Shell) and `windows_amd64` |
 | Terraform `hashicorp/archive` | `2.8.1` | `versions.tf` · `.terraform.lock.hcl` | Zips the kill-switch source |
 | Cloud Run functions runtime | `nodejs24` | `infra/bootstrap/kill_switch.tf` | The kill switch |
 | `@google-cloud/functions-framework` | `5.0.5` | `infra/bootstrap/function/package.json` · `package-lock.json` | The kill switch's only declared dependency. Pinned by D-073 under R-SEC-04; an upgrade is its own change, and George's after merge (D-070) |
 | `@electric-sql/pglite` | `0.3.16` | `checks/skeleton.test.mjs` header · `checks/README.md` | Test-only, and the one thing here **not** installed in the repo: D-084 puts a test-only package in the developer's scratch folder, so there is no manifest to pin it in. The version is pinned by the `npm install --save-exact` line both files carry. Embeds PostgreSQL 17.5; the VM runs 16 (D-063) |
-| Nakama | `TBD` | docker tag, exact — never `:latest` | |
-| Postgres | `TBD` | Neon project setting | |
+| Nakama | `3.40.0` | `services/nakama/docker-compose.yml`, exact tag | Open-source Nakama, not Heroic Cloud (D-060). Caps `name` at 16 characters and refuses to start past it |
+| Postgres | `16.15` | `services/nakama/docker-compose.yml`, exact tag | On the Nakama VM (D-063), which ended the Neon project this row used to name. `@electric-sql/pglite` below embeds 17.5, so the spec test runs on a later major than the VM |
+| TypeScript | `5.9.3` | `services/nakama/package.json` · `package-lock.json` | Builds the Nakama module. **Not 7.x:** TypeScript 7 removed `outFile` and `target: es5`, and Nakama loads one ES5 file |
+| Docker Compose | `v5.5.1` | `infra/dev/vm_nakama.tf`, with its sha256 | Container-Optimized OS ships Docker but not Compose. The standalone binary is downloaded at boot and checksum-verified before it is made executable |
+| Container-Optimized OS | `cos-121-lts` | `infra/dev/vm_nakama.tf` | The image family is the LTS milestone, not a moving one. Docker 27.5.1. Supported to March 2027 |
 | dbt | `TBD` | `requirements.txt`, exact | |
 
 `TBD` is not a placeholder to leave. Fill each one the moment that thing is installed, in

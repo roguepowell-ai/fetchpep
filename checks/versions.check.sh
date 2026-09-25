@@ -29,7 +29,11 @@ while IFS= read -r f; do
     echo "$bad" | head -5 | sed 's/^/      /'
     fail=1
   fi
-done < <(find . -name package.json -not -path './node_modules/*' \
+# `*/node_modules/*`, not `./node_modules/*`: the first nested package in the repo
+# (services/nakama) put a node_modules below the root, and the old pattern only excluded one
+# at the top. It then read a dependency's own manifest and failed on ranges nobody here
+# wrote. A check that cries wolf is a check that gets switched off (this file's rule 1).
+done < <(find . -name package.json -not -path '*/node_modules/*' \
               -o -name manifest.json -path '*/Packages/*' 2>/dev/null)
 
 # --- 3. Never :latest in a container reference -----------------------------------

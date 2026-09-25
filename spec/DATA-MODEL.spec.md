@@ -170,10 +170,19 @@ services/nakama/
   Anything a player or crash report could see says Inkfold.
 - **R2 object keys**: `catalogue/<catalogue_id>/<sha256-12>.atlas.png` and `.atlas.json` —
   content-hashed, so a sprite is never overwritten in place; `release/<0001>/manifest.json`.
-- **Secret Manager**: `nakama-db-password`, `nakama-server-key`, `nakama-http-key` (the doors),
-  `nakama-console-password`, `invite-email-hmac-key` (D-080; proposed, shared with the
-  website; where it lives is part of the VM brief, issue #13). Values never in the repo
-  (R-SEC-01).
+- **Secret Manager**, eight, each with a rotation period and a rotate step (D-089;
+  `infra/dev/secrets.tf` has the periods and the reasoning, `ops/RUNBOOK.ops.md` Part 5 the
+  procedure). Values never in the repo, and never created by Terraform (R-SEC-01).
+  - `nakama-db-password`
+  - `nakama-server-key`, `nakama-http-key` — the client key and the doors
+  - `nakama-console-password`
+  - `nakama-session-encryption-key`, `nakama-session-refresh-encryption-key`,
+    `nakama-console-signing-key` — **added 25 Sep.** Nakama has a default for each, and the
+    default is in its published source. Left unset, anyone who reaches the port can forge a
+    player session or an admin console token without knowing any password, which would make
+    the console password decorative (R-SEC-02).
+  - `invite-email-hmac-key` (D-080). Lives in `fetchpep-dev` like the others (D-090); how
+    the website gets the same key is open until we know where the website runs — O-77.
 
 ### Migration 0001 — `directory`
 

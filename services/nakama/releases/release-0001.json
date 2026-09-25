@@ -1,0 +1,34 @@
+{
+  "idempotency_key": "release-0001",
+  "release": 1,
+  "note": "Seed release. One species, one coat, drawn and designed by Joshua (D-058). The sprite_ref is a placeholder, not an R2 object key: R2 is out of scope until there is a domain (O-58), and the real key is catalogue/<catalogue_id>/<sha256-12>.atlas.png.",
+  "phases": [
+    {
+      "key": "first-light",
+      "name": "First light",
+      "places": 12
+    }
+  ],
+  "species": [
+    {
+      "key": "reedling",
+      "phase": "first-light",
+      "guide_number": 1,
+      "name": "Reedling",
+      "habitat_hint": "Keeps to wet ground where the reeds stand thickest.",
+      "behaviour_hint": "Waits out anything that moves. Comes back when you do not."
+    }
+  ],
+  "catalogue": [
+    {
+      "key": "reedling-plain",
+      "species": "reedling",
+      "coat_name": null,
+      "artist": "Joshua",
+      "creator": "Joshua",
+      "sprite_ref": "placeholder:no-atlas-yet/reedling-plain",
+      "habitat": "reedbed",
+      "rarity": "common"
+    }
+  ]
+}
