@@ -136,13 +136,18 @@ Ordered. Nothing below moves until the item above it does.
 - **O-50 to O-53 · resolved 24 Sep by D-062 to D-065.** Game logic in Nakama; PostgreSQL
   on the VM; HCP Terraform with one Cloud Shell bootstrap; Cloudflare Tunnel and R2
 
-**O-54 · Nakama's own tables, or ours.** D-063 puts one PostgreSQL on the VM. Nakama
+**O-54 · Nakama's own tables, or ours — resolved 25 Sep by D-079 (split).** Nakama holds
+accounts, sign-in and sessions; all game data lives in `directory` and `shard_gi`. Still
+unverified, and carried by D-079 to the VM brief: that the TypeScript runtime can write to
+those tables. The original item: D-063 puts one PostgreSQL on the VM. Nakama
 creates and migrates its own tables; the seam (D-051) and the append-only ledger need real
 SQL tables. Proposed: Nakama's tables for accounts and sign-in only; `directory` and
 `shard_gi` for all game data, written from the TypeScript modules. Verify how the
 TypeScript runtime reaches SQL before relying on it.
 
-**O-55 · How game identity gets into the game.** `spec/DATA-MODEL.spec.md` puts game
+**O-55 · How game identity gets into the game — resolved 25 Sep by D-080 (invite by
+email), through the D-081 door.** Phone pairing is no longer part of it (D-076). Sign-in
+methods stay open as O-47. The original item: `spec/DATA-MODEL.spec.md` puts game
 identity in `directory`; Nakama keeps its own accounts. D-054 gives every steward and
 member a login; the steward is age-checked on the website; D-066 says nothing live between
 them. Options: through the publish door in batches, or a sign-in both sides share. With O-47.
@@ -197,14 +202,15 @@ logging `couldDetach: false`, shows only in the function's logs. A log-based ale
 notification channel, which needs an email address in Terraform. Deferred from B-001;
 changing the kill switch after merge is George's (D-070).
 
-**O-71 · GitHub Desktop's push fails on the pre-push hook — fixed on branch
-`brief-b002-step0`, closes when that PR merges.** The error was
+**O-71 · GitHub Desktop's push fails on the pre-push hook — fix merged in PR #14; closes
+on George's first successful push from GitHub Desktop, not on the merge.** The error was
 `/usr/bin/env: 'bash': No such file or directory`. [certain] GitHub Desktop 3.6.6 bundles
 git 2.53.0 with `usr/bin/sh.exe` and `usr/bin/env.exe` but no `bash.exe`. The developer
 chose to make the hook run under that git rather than make the developer the only one who
 pushes (D-069): George pushes from Desktop, and a hook that only works for one pusher gates
 only that pusher. `.githooks/pre-push` is now a POSIX `sh` shim that finds bash (on `PATH`,
-then `C:\Program Files\Git\bin\bash.exe`) and runs the unchanged checks in
+then `C:\Program Files\Git\bin\bash.exe`, then `C:\Program Files\Git\usr\bin\bash.exe`) and
+runs the unchanged checks in
 `.githooks/pre-push.bash`. If no bash is found it **refuses** the push. **Evidence**, pushing
 to a local bare repository with Desktop's bundled `git.exe` in an empty environment: clean
 tree → eight `ok` lines, `── all green ──`, pushed; a banned term in the tree →
@@ -212,8 +218,10 @@ tree → eight `ok` lines, `── all green ──`, pushed; a banned term in t
 the refusal message, exit 1. **Not proven:** a push from the GitHub Desktop app itself.
 George's next push from Desktop is that test.
 
-**O-72 · The standing watch in D-075: the developer's position differs.** Raised under
-D-069; George rules and the ruling gets an ID.
+**O-72 · The standing watch in D-075: the developer's position differs — resolved 25 Sep
+by D-083.** George chose "Watch + one line from me": the developer watches and notifies,
+and George starts each piece of work with one line in the session. The loop is written in
+`ops/RUNBOOK.ops.md` Part 4. The positions as they were raised, under D-069:
 - **D-075, step 4 and step 5 of B-002 (issue #11):** after the step-0 PR merges, the
   developer runs a standing loop and *acts* on any issue or comment by `roguepowell-ai`.
 - **The developer's position:** the loop can **watch and report** (poll issues and review
@@ -331,11 +339,15 @@ can currently confirm.
 - **O-47 · Sign-in methods.** D-054 says the steward and every member have their own login.
   Which method each uses is open: the 26 Aug data model says Apple or Google for both; the
   design boards show the steward on email and password and members picking their name on a
-  shared phone
+  shared phone. Since 25 Sep: there is no picker (D-076), and whatever the methods are, a
+  member is matched to an invite by the email their account carries. A relay address that
+  doesn't match is handled by people, not code (D-082)
 - **O-48 · The design boards predate today's decisions.** The Atlas board says "Region —
   Cornwall" and the design system README lists *region* as vocabulary (D-051 retires it); the
   App Shell's "Who's playing" picker assumes members have no login (D-054 gives them one).
-  The boards live in the Inkfold design system, which is George's to edit
+  **D-076 removes the picker:** one login per member, no switching between members on a
+  device, no phone pairing. The boards live in the Inkfold design system, which is George's
+  to edit
 - **O-49 · The Heroic Cloud account holds a payment card and is not in the stack.** On 24
   Sep George added card details after Heroic Labs' documentation links led to its sign-up
   pages; no plan was started. An unused account with a card is a cost risk until closed.
@@ -347,18 +359,27 @@ can currently confirm.
 - **O-59 · PRIVACY's reason for keys in Cloud KMS cites Neon.** It says Neon's restorable
   history would bring a deleted key back. Under D-063 the VM's disk snapshots do the same, so
   the conclusion holds and the reason needs rewording. `claude-proposes`
-- **O-60 · Steward controls into the game, reports out.** The visitor lock, fold membership,
+- **O-60 · Steward controls into the game, reports out — resolved 25 Sep by D-081.** One
+  narrow live door, `apply_control`, logged in `directory.door_log`. How reports travel out
+  is left to the brief that builds the door. The original item: the visitor lock, fold membership,
   blocks and phone pairing are set on the website; a report filed in the game must reach a
   person. D-066 says nothing live between them, and a release batch is too slow for a lock.
   Proposed: a second server-to-server door, `apply_control`, logged in `directory.door_log`.
   Needs a decision, because it is a live call from the website into the game
-- **O-61 · Sign-in: the picker or a login.** D-054 gives every member a login; the App
-  Shell's "Who's playing" picker assumes members have none (O-48, O-47)
-- **O-62 · Specimen names are free text.** The only text a member types that others might
-  see. No moderation path exists in the game. Options: names private to the fold, a word
-  list, or a check. `shard_gi.specimen_name.status` is ready for whichever
-- **O-63 · Who is credited when a creature is fed or kept.** D-058 gives every creature an
-  artist and a creator. The proposed skeleton records both at the time of the feed
+- **O-61 · Sign-in: the picker or a login — resolved 25 Sep by D-076 (a login).** The
+  original item: D-054 gives every member a login; the App Shell's "Who's playing" picker
+  assumes members have none (O-48, O-47)
+- **O-62 · Specimen names are free text — resolved 25 Sep by D-077 (blocked-word list).**
+  `spec/DATA-MODEL.spec.md` proposes `directory.name_filter`, versioned release data, with
+  `specimen_name.filter_version` recording which list decided each name. The list's words
+  are not written. The original item: the only text a member types that others might see.
+  No moderation path exists in the game. Options: names private to the fold, a word list,
+  or a check
+- **O-63 · Who is credited when a creature is fed or kept — resolved 25 Sep by D-078
+  (both).** D-078 says "the skeleton already does this". That was true for feeding and not
+  for keeping, so `creature_interaction` gains a `kept` row, written when a capture goes into
+  a pen slot. The original item: D-058 gives every creature an artist and a creator. The
+  proposed skeleton records both at the time of the feed
 - **O-64 · resolved 24 Sep by D-068.** `services/` and `infra/` are `claude-proposes`;
   `services/nakama/migrations/` routes to `spec/DATA-MODEL.spec.md` through `nakama.md`
 - **O-65 · Play the skeleton does not model yet.** Things built on the land, where encounters
