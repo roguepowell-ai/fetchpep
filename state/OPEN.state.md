@@ -153,8 +153,9 @@ rather than a formality, and so a failure is recognised instead of debugged from
    `service-<number>@gcp-sa-secretmanager.iam.gserviceaccount.com` publisher on the rotation
    topic by its well-known address. [likely] The agent is created the first time the service
    is used, and a binding to a principal that does not exist is refused. `ops/RUNBOOK.ops.md`
-   Part 5 step 0 creates it first with `gcloud beta services identity create`; if the apply
-   still refuses the binding, that step did not take.
+   Part 5 step **0b** creates it first with `gcloud beta services identity create`; if the
+   apply still refuses the binding, that step did not take. (It was step 0 until the hand
+   activation took that number.)
 4. **Instance metadata size.** Seven files go up as metadata, the two migrations being most
    of it — about 55 KB against a 256 KB limit per key and 512 KB in total. Comfortable, but
    it is a ceiling that grows with every migration, and migration 0003 is already coming

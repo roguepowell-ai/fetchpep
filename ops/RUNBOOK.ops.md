@@ -474,8 +474,15 @@ Each step needs the one before it.
 
    ```
    verify: gcloud services list --enabled --project fetchpep-dev
-           lists all eleven above, and none of the eight kill-switch ones
+           lists all eleven above
    ```
+
+   [likely] **`storage.googleapis.com` may already be in that list**, because a project made
+   in the Console tends to have it on from the start. That is harmless and not a sign step 0
+   went wrong: D-099 is about what the *apply* creates, not about which services happen to be
+   enabled. The seven that matter — `billingbudgets`, `cloudbilling`, `cloudfunctions`,
+   `cloudbuild`, `run`, `eventarc` and `artifactregistry` — should be absent, and none of
+   them is on by default.
 
    Both stacks still **declare** these services, in `infra/bootstrap/workload_identity.tf`
    and `infra/dev/versions.tf`, all with `disable_on_destroy = false`. On a service that is
@@ -522,9 +529,21 @@ Each step needs the one before it.
 
    which prints `billingAccounts/000000-000000-000000`; pass the part after the slash.
 
+   **Two blocks, and the gap between them matters.** `init` creates the workspace in the
+   organisation's default mode, which is Remote, and a remote run has no Google credentials
+   (O-67). The Execution mode has to be switched to **Local** before the plan. Pasted as one
+   block — and with bracketed paste off, as the preamble says — the plan would run
+   immediately, in Remote, and fail.
+
    ```
    cd ~/fetchpep/infra/bootstrap
-   terraform init                    # creates the workspace; then set Execution mode Local
+   terraform init                    # creates the workspace
+   ```
+
+   Now, in the HCP Terraform UI: Workspace `fetchpep-bootstrap` → Settings → General →
+   **Execution mode: Local** → Save. Then, and only then:
+
+   ```
    terraform plan -out=/tmp/trust.plan \
      -var billing_account=<the billing account id> \
      -var warn_amount=10 -var kill_amount=30 \
@@ -593,8 +612,11 @@ Each step needs the one before it.
    verify: the loop prints nothing at all (D-099, D-072)
    ```
 
-   **If the apply fails, run the whole of step 1 again** — the
-   `terraform plan … -out=/tmp/trust.plan` command, then the verify loop, then the apply.
+   **If the apply fails, run the whole of step 1 again — all four commands, in order:**
+   the `terraform plan … -out=/tmp/trust.plan`, then the `terraform show -json … >
+   /tmp/planned.txt`, then the verify loop, then the apply. Skipping the `show` would leave
+   the loop reading the *previous* plan's addresses, which is a check that passes without
+   having looked at what is about to run.
    [certain] A saved plan cannot be applied twice: once Terraform has used it, the file is
    spent, and `terraform apply /tmp/trust.plan` refuses it rather than retrying. **A fresh
    plan is the retry**, and the verify loop has to run against the fresh one — it is the new
