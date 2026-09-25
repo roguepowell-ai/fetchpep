@@ -1,0 +1,100 @@
+#!/bin/bash
+# Runs as root at every boot (Container-Optimized OS honours the startup-script key).
+# Idempotent: a reboot re-runs it and nothing is created twice.
+#
+# What it does: writes the service's files out of instance metadata, fetches the four
+# secrets from Secret Manager with the VM's own service account, renders the Nakama config,
+# and brings the containers up.
+#
+# No secret is ever echoed, and there is no `set -x`. Anything printed here goes to the
+# serial console and to Cloud Logging, and logs are a data store (R-SEC-06).
+set -euo pipefail
+
+APP_DIR="${app_dir}"
+COMPOSE_VERSION="${compose_version}"
+COMPOSE_SHA256="${compose_sha256}"
+PROJECT="${project_id}"
+
+log() { echo "fetchpep-startup: $1"; }
+
+md() {
+  curl -sf -H 'Metadata-Flavor: Google' \
+    "http://metadata.google.internal/computeMetadata/v1/$1"
+}
+
+mkdir -p "$APP_DIR/migrations" "$APP_DIR/build" "$APP_DIR/bin"
+cd "$APP_DIR"
+
+# ---------------------------------------------------------------- the service's files
+# Each file is its own metadata key, so nothing has to be escaped into a shell heredoc and
+# the plan shows each file's contents as its own diff.
+log "writing files from instance metadata"
+md instance/attributes/fetchpep-compose        > docker-compose.yml
+md instance/attributes/fetchpep-nakama-config  > nakama.yml
+md instance/attributes/fetchpep-render-config  > render-config.sh
+md instance/attributes/fetchpep-migrate-run    > migrations/run.sh
+md instance/attributes/fetchpep-migration-0001 > migrations/0001_directory.sql
+md instance/attributes/fetchpep-migration-0002 > migrations/0002_shard_gi.sql
+md instance/attributes/fetchpep-module         > build/index.js
+
+# ---------------------------------------------------------------- docker compose
+# Container-Optimized OS ships Docker but not Compose, and /usr is read-only, so the plugin
+# cannot be installed where Docker looks for one. The standalone binary works the same way
+# and lives on the writable partition. Exact version, checksum verified before it is made
+# executable (R-SEC-04) — a download at boot is a supply chain, and an unverified one is
+# somebody else's.
+if [ ! -x bin/docker-compose ]; then
+  log "installing docker compose $COMPOSE_VERSION"
+  curl -sfL -o bin/docker-compose.tmp \
+    "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64"
+  echo "$COMPOSE_SHA256  bin/docker-compose.tmp" | sha256sum -c -
+  chmod 0755 bin/docker-compose.tmp
+  mv bin/docker-compose.tmp bin/docker-compose
+else
+  log "docker compose already installed"
+fi
+
+# ---------------------------------------------------------------- the secrets
+# The VM's service account may read exactly these four and nothing else (secrets.tf).
+log "reading secrets"
+TOKEN=$(md instance/service-accounts/default/token \
+  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+if [ -z "$TOKEN" ]; then
+  log "no access token from the metadata server"
+  exit 1
+fi
+
+secret() {
+  curl -sf -H "Authorization: Bearer $TOKEN" \
+    "https://secretmanager.googleapis.com/v1/projects/$PROJECT/secrets/$1/versions/latest:access" \
+    | sed -n 's/.*"data": *"\([^"]*\)".*/\1/p' \
+    | base64 -d
+}
+
+umask 077
+{
+  echo "NAKAMA_DB_PASSWORD=$(secret nakama-db-password)"
+  echo "NAKAMA_SERVER_KEY=$(secret nakama-server-key)"
+  echo "NAKAMA_HTTP_KEY=$(secret nakama-http-key)"
+  echo "NAKAMA_CONSOLE_PASSWORD=$(secret nakama-console-password)"
+} > .env
+chmod 600 .env
+
+# A secret that came back empty writes an empty value, and an empty password is worse than
+# a missing one because the server starts.
+if grep -qE '^[A-Z_]+=$' .env; then
+  log "a secret came back empty — is there a version of each one?"
+  rm -f .env
+  exit 1
+fi
+
+# ---------------------------------------------------------------- start
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+sh render-config.sh "$APP_DIR/nakama.runtime.yml"
+
+log "starting containers"
+bin/docker-compose -f docker-compose.yml up -d --wait
+log "up"

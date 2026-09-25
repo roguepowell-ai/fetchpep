@@ -149,10 +149,17 @@ Ordered. Nothing below moves until the item above it does.
 - **O-50 to O-53 · resolved 24 Sep by D-062 to D-065.** Game logic in Nakama; PostgreSQL
   on the VM; HCP Terraform with one Cloud Shell bootstrap; Cloudflare Tunnel and R2
 
-**O-54 · Nakama's own tables, or ours — resolved 24 Sep by D-079 (split).** Nakama holds
-accounts, sign-in and sessions; all game data lives in `directory` and `shard_gi`. Still
-unverified, and carried by D-079 to the VM brief: that the TypeScript runtime can write to
-those tables. The original item: D-063 puts one PostgreSQL on the VM. Nakama
+**O-54 · Nakama's own tables, or ours — resolved 24 Sep by D-079 (split); the last part
+verified 25 Sep.** Nakama holds
+accounts, sign-in and sessions; all game data lives in `directory` and `shard_gi`. What
+D-079 carried to the VM brief — that the TypeScript runtime can write to those tables — is
+now proven, on Nakama 3.40.0 against PostgreSQL 16.15. **Evidence** (brief #13, in the PR):
+the module logs `fetchpep: module loaded, 2 migration(s) applied` at start, which is a
+`nk.sqlQuery` against `directory.schema_migration`; `publish_release` wrote a release, a
+phase, a species, a coat and a `directory.door_log` row in one statement and returned
+`{"outcome":"applied",…,"door_log_id":1}`; `read_catalogue` read them back. The three
+schemas sit side by side in one database — `public` 20 tables (Nakama's own),
+`directory` 20, `shard_gi` 23. The original item: D-063 puts one PostgreSQL on the VM. Nakama
 creates and migrates its own tables; the seam (D-051) and the append-only ledger need real
 SQL tables. Proposed: Nakama's tables for accounts and sign-in only; `directory` and
 `shard_gi` for all game data, written from the TypeScript modules. Verify how the
@@ -182,10 +189,13 @@ from connecting GitHub as a VCS provider, and only the second one makes runs hap
 pull request. Connecting it is an OAuth grant against the GitHub account and is George's to
 approve.
 
-**O-32 · There is no `infra/` directory and no `.tf` file — built on the B-001 branch.**
-`infra/bootstrap/` holds `versions.tf` and `kill_switch.tf`; `terraform validate` output is
-under B-001 above. Closes when PR #9 merges; until then `main` still has no `infra/`. `workload_identity.tf`, named in `spec/DATA-MODEL.spec.md`, is
-not written: B-001 covers the kill switch only, so the trust setup needs its own brief.
+**O-32 · resolved.** `infra/bootstrap/` holds `versions.tf`, `kill_switch.tf` and, since
+brief #13, `workload_identity.tf` — the trust setup B-001 left out. `infra/dev/` holds the
+network, the VM, the snapshot schedule, the secret containers and their inputs and outputs.
+Nothing is applied: both stacks are Manual apply and the apply is operations' (D-067).
+**Evidence** in the #13 PR: `terraform fmt -check -recursive infra` exits 0, and
+`terraform validate` returns `Success! The configuration is valid.` in both stacks.
+`infra/dev/.terraform.lock.hcl` is committed, locked for `linux_amd64` and `windows_amd64`.
 
 **O-67 · The `fetchpep-bootstrap` workspace must run in local execution mode.**
 `infra/bootstrap/versions.tf` stores state in HCP Terraform (D-064) under a `cloud` block.
@@ -278,11 +288,16 @@ it is behind O-31 and O-32, which is the actual reason this is urgent rather tha
 the guard is George's existing budget alerts, which warn and do not stop spend. The code is
 PR #9. This item closes when the kill switch is applied before launch, not before the VM.
 
-**O-34 · Terraform CLI is extracted, not installed.**
-`terraform.exe` sits loose in `Downloads\terraform_1.16.4_windows_amd64\`. It is not on
-`PATH`, so `terraform` resolves from no shell. Only needed for local `plan`; HCP Terraform
-runs remotely. Not a blocker, but `ops/VERSIONS.ops.md` records a version that no command
-can currently confirm.
+**O-34 · Terraform CLI is extracted, not installed — restated for the Cloud Shell seat.**
+The original: `terraform.exe` sat loose in `Downloads\terraform_1.16.4_windows_amd64\` on
+the PC, not on `PATH`. That seat is retired (D-085). On the Cloud Shell seat `terraform` is
+not installed either — `/google/bin/terraform` is a stub that prints installation
+instructions — so each session fetches `1.16.4` into its own scratch folder and checks it
+against HashiCorp's `SHA256SUMS` before running it (`terraform_1.16.4_linux_amd64.zip: OK`,
+25 Sep). That is a per-session download, not an install: D-085 puts installs in a scratch
+folder, and an install anywhere else is a stop. So the version is confirmable by command
+again, and the item is now about whether a per-session fetch is the shape George wants
+rather than about a loose binary.
 
 ## Blocking the first build
 

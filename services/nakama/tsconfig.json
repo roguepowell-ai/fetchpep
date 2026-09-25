@@ -1,0 +1,27 @@
+{
+  "//": [
+    "Nakama loads one JavaScript file, so `outFile` concatenates the sources into",
+    "build/index.js. There are no imports or exports: with `outFile` every file shares one",
+    "scope, which is how the runtime expects a module to be written.",
+    "`files` is listed in order rather than globbed, so the output is the same on every",
+    "machine and a diff in build/index.js means a diff in the sources.",
+    "ES5 because Nakama's JavaScript engine is goja, which is ES5.1 with parts of ES6."
+  ],
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["es5"],
+    "outFile": "./build/index.js",
+    "strict": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "files": [
+    "src/nakama.d.ts",
+    "src/domain/door.ts",
+    "src/rpc/publish_release.ts",
+    "src/rpc/read_catalogue.ts",
+    "src/main.ts"
+  ]
+}

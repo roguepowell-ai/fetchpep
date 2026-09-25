@@ -46,6 +46,15 @@ dist/
 .env.*
 !.env.example
 
+# The Nakama module's build output is committed, against the Unity `[Bb]uild/` rule above.
+# Nakama loads one JavaScript file; the VM has no build step and there is no image registry
+# yet, so infra/dev delivers this exact file to the VM in instance metadata. Rebuilt with
+# `npm run build` in services/nakama — see O-74 for the check that nothing has to remember.
+!services/nakama/build/
+
+# Rendered from nakama.yml at boot with the secrets in it (R-SEC-01).
+services/nakama/nakama.runtime.yml
+
 # ---- Terraform ----
 .terraform/
 *.tfstate
