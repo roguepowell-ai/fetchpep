@@ -74,6 +74,14 @@ fi
 DEV=/dev/disk/by-id/google-pgdata
 mkdir -p "$PGDATA_DIR"
 if ! mountpoint -q "$PGDATA_DIR"; then
+  # Is the disk there at all? Without this, a missing disk fell through to mkfs, which
+  # failed and stopped the script — the right outcome, reached through a log line that said
+  # "formatting the database disk (first boot)". A log that misnames the fault costs more
+  # than the fault.
+  if [ ! -b "$DEV" ]; then
+    log "data disk not attached: $DEV is not a block device. Nothing started."
+    exit 1
+  fi
   if ! blkid "$DEV" >/dev/null 2>&1; then
     log "formatting the database disk (first boot)"
     mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard "$DEV"
@@ -142,9 +150,13 @@ if [ -z "$TOKEN" ]; then
   exit 1
 fi
 
+# The access token goes to curl in a config file on **stdin**, not in argv. An argument is
+# visible in `ps` to every process on the host, and R-SEC-06 counts a token as a secret like
+# any other. `--config -` reads the header from standard input instead.
 secret() {
-  curl -sf -H "Authorization: Bearer $TOKEN" \
-    "https://secretmanager.googleapis.com/v1/projects/$PROJECT/secrets/$1/versions/latest:access" \
+  printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" \
+    | curl -sf --config - \
+      "https://secretmanager.googleapis.com/v1/projects/$PROJECT/secrets/$1/versions/latest:access" \
     | sed -n 's/.*"data": *"\([^"]*\)".*/\1/p' \
     | base64 -d
 }
@@ -152,21 +164,49 @@ secret() {
 # name -> NAME, so nakama-db-password becomes NAKAMA_DB_PASSWORD.
 env_name() { echo "$1" | tr 'a-z-' 'A-Z_'; }
 
+# Every value must match ^[A-Za-z0-9_-]+$. render-config.sh checks the four it substitutes,
+# but that is after `.env` has been written and sourced — too late, and it never sees the
+# other four at all. Checked here instead, before anything is written, for every secret
+# including invite-email-hmac-key, which no renderer will ever look at.
+check_charset() {
+  case $2 in
+    "")            log "$1 came back empty"; return 1 ;;
+    *[!A-Za-z0-9_-]*) log "$1 has a character outside [A-Za-z0-9_-]. Rotate it; see infra/dev/secrets.tf."; return 1 ;;
+  esac
+  return 0
+}
+
+# `.env.tmp` holds the secrets read so far, so it never outlives a failure.
+give_up() {
+  rm -f .env.tmp
+  exit 1
+}
+
 umask 077
 : > .env.tmp
 for s in $SECRET_NAMES; do
   # invite-email-hmac-key has no consumer in the container yet (O-77); it is read here so
   # that a missing version is caught at boot rather than on the day something needs it.
-  printf '%s=%s\n' "$(env_name "$s")" "$(secret "$s")" >> .env.tmp
+  name=$(env_name "$s")
+  # `|| { … }`, not a bare assignment. `secret` is curl, and `set -e` would otherwise take
+  # the script down on a missing version with curl's exit code and **no log line at all** —
+  # the one path where the operator most needs to be told which secret, because it is the
+  # first boot after a fresh apply and the fallback in the runbook depends on the names.
+  if ! value=$(secret "$s"); then
+    log "$name: no readable version. Has one been added? (gcloud secrets versions add $s)"
+    give_up
+  fi
+  # The name is logged on failure, never the value.
+  check_charset "$name" "$value" || give_up
+  printf '%s=%s\n' "$name" "$value" >> .env.tmp
 done
 
-# A secret that came back empty writes an empty value, and an empty password is worse than a
-# missing one because the server starts.
+# check_charset already refuses an empty value, so this should be unreachable. Kept as the
+# second net, because an empty password is worse than a missing one: the server starts.
 if grep -qE '^[A-Z_]+=$' .env.tmp; then
   log "a secret came back empty — is there a version of each one? Names, not values:"
   grep -E '^[A-Z_]+=$' .env.tmp | cut -d= -f1
-  rm -f .env.tmp
-  exit 1
+  give_up
 fi
 
 printf 'PGDATA_PATH=%s\n' "$PGDATA_DIR/data" >> .env.tmp

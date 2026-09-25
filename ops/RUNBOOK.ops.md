@@ -336,31 +336,116 @@ PR (D-069). Anything else the brief did not ask for is a question on the issue o
 Operations runs everything here, in Cloud Shell, with George signed in (D-064, D-067). The
 developer never applies. Nothing in this part is automatic.
 
-## 20. Execution mode: the two workspaces differ
+## 20. Before anything: the two workspaces, and the tool
 
-| Workspace | Execution mode | Why |
-|---|---|---|
-| `fetchpep-bootstrap` | **Local** | It creates the trust that everything else authenticates with, so it cannot authenticate with it. It runs in Cloud Shell under George's own sign-in and only the state is remote (O-67) |
-| `fetchpep-dev` | **Remote** | [likely] HCP Terraform's dynamic provider credentials are minted for the run, in HCP Terraform. A local run has no such token and would need a key instead, which is the thing D-064 removes |
+### The repository
 
-The organisation default stays Remote. `fetchpep-bootstrap` is the exception, set by hand.
+Everything below runs from a clone of `main`. Get one, or bring an existing one up to date:
 
-**`fetchpep-dev`'s working directory must be `infra/dev`.** [likely] `vm_nakama.tf` reads
-`../../services/nakama/...` with `file()`, so the whole repository has to be in the run's
-upload, with the stack one directory inside it. A workspace configured with `infra/dev` as
-its *root* rather than its working directory would upload only that folder, and every
-`file()` would fail at plan.
+```
+git clone https://github.com/roguepowell-ai/fetchpep.git ~/fetchpep   # first time only
+cd ~/fetchpep && git checkout main && git pull                        # every time
+git config core.hooksPath .githooks                                   # once per clone
+```
+
+`git clone` over HTTPS, not `gh repo clone`: the repository is public
+(`ops/INFRA.ops.md`), so no sign-in is needed, and a fresh Cloud Shell has no `gh auth`.
+The `cd` is on the second line for a reason — run from `~`, the third line would configure
+nothing, because `~` is not a repository.
+
+```
+verify: cd ~/fetchpep && git log --oneline -1   is the merge you mean to apply
+```
+
+### The tool
+
+Terraform is **not installed** on Cloud Shell — `/google/bin/terraform` is a stub that
+prints installation instructions. Fetch the pinned version and check it, per session.
+
+**Every line is chained with `&&` on purpose.** Pasted as separate lines, a failed
+`sha256sum` still lets `unzip` run on the next line, and the check becomes decoration:
+
+```
+mkdir -p ~/tfbin && cd ~/tfbin \
+  && curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_SHA256SUMS \
+  && curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_amd64.zip \
+  && sha256sum -c --ignore-missing terraform_1.16.4_SHA256SUMS \
+  && echo "dc94af0eef1147718ad7c8daea792ed199e3e0492eec180d0adafa2a65a879df  terraform_1.16.4_linux_amd64.zip" \
+       | sha256sum -c - \
+  && unzip -o terraform_1.16.4_linux_amd64.zip \
+  && export PATH="$HOME/tfbin:$PATH" \
+  && terraform version
+terraform login          # a browser token for app.terraform.io, once per machine
+```
+
+The second `sha256sum -c` is not a duplicate of the first. The first checks the zip against
+a `SHA256SUMS` fetched from the same host, which proves nothing if that host is serving both.
+The second checks it against the hash written down in `ops/VERSIONS.ops.md`, by us, when this
+was written.
+
+[certain] This does **not** verify HashiCorp's signature. The `.sig` file and their GPG key
+would do that; the pinned hash covers the case that matters here — the file changing between
+the version this was written against and the one George downloads.
+
+```
+verify: terraform_1.16.4_linux_amd64.zip: OK
+        terraform version   →   Terraform v1.16.4
+        terraform login     →   Retrieved token for user <george>
+```
+
+`required_version` is exact in both stacks, so a different Terraform refuses to run at all.
+
+### The two workspaces differ, and neither default is right
+
+| Workspace | Execution mode | Apply method | Working directory |
+|---|---|---|---|
+| `fetchpep-bootstrap` | **Local** | n/a — the apply happens in Cloud Shell | — |
+| `fetchpep-dev` | **Remote** | **Manual apply** | **`infra/dev`** |
+
+Each is created by its stack's first `terraform init`, and each is created **wrong**: the
+organisation default is Remote execution and, on a new workspace, auto-apply is off but the
+working directory is empty. So the order is always *init, then fix the settings, then plan*.
+
+**`fetchpep-bootstrap` must be Local** before its first plan (O-67). It creates the trust
+that everything else authenticates with, so it cannot authenticate with it; a remote run has
+no Google credentials and fails. Workspace → Settings → General → Execution mode → Local.
+
+**`fetchpep-dev` must be Remote**, because its credentials are minted per run through
+workload identity (D-064). A local run would need a key, which is the thing D-064 removes.
+It must also be **Manual apply** (O-29): an auto-apply workspace provisions real
+infrastructure with nobody clicking, which `CLAUDE.md` section 2 forbids.
+
+**And its working directory must be `infra/dev`, set before the first run.** This is not
+tidiness. `infra/dev/vm_nakama.tf` reads `../../services/nakama/...` with `file()`, and what
+a CLI-driven run uploads depends on this setting:
+
+> "When the local working directory matches the name of the configured working directory,
+> Terraform uploads one or more parents of the local working directory, according to the
+> depth of the configured working directory."
+>
+> "When the local working directory does not match the name of the configured working
+> directory, Terraform assumes it is the root of the configuration directory, and uploads
+> only the local working directory."
+
+— [CLI-driven runs](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/cli)
+
+`infra/dev` is two levels deep, so with the setting in place Terraform uploads two parents —
+the repository root — and the `file()` calls resolve. With the setting empty it uploads
+`infra/dev` alone and **every one of them fails at plan**. The same setting is what makes a
+VCS-driven run work later (O-31), so it is right either way.
 
 ## 21. Apply order
 
-Each step needs the one before it. Steps 1 and 3 are George's.
+Each step needs the one before it.
 
-0. **Create Secret Manager's service agent, before anything else.** [likely] The agent is
-   created the first time the service is used, and the bootstrap stack grants it publisher
-   on the rotation topic — a binding to a principal that does not exist yet is refused. One
-   command, and it is safe to repeat:
+0. **Secret Manager's service agent.** [likely] The agent is created the first time the
+   service is used, and the bootstrap stack grants it publisher on the rotation topic — a
+   binding to a principal that does not exist yet is refused. Nothing has enabled Secret
+   Manager at this point, because the bootstrap stack is what would, and it runs next. Both
+   commands are safe to repeat:
 
    ```
+   gcloud services enable secretmanager.googleapis.com --project fetchpep-dev
    gcloud beta services identity create --service=secretmanager.googleapis.com \
      --project fetchpep-dev
    ```
@@ -368,32 +453,173 @@ Each step needs the one before it. Steps 1 and 3 are George's.
    ```
    verify: it prints   service-424117215837@gcp-sa-secretmanager.iam.gserviceaccount.com
    ```
-1. **`fetchpep-bootstrap`, locally.** Creates the workload identity pool and provider, the
-   plan and apply service accounts, the two custom roles, the VM's own service account and
-   the secret rotation topic. The kill switch is in the same stack but a separate question
-   (D-070, D-072).
 
-   **Read the plan before applying.** It should show **no change to any kill-switch
-   resource**. Nothing in this brief touches `kill_switch.tf`: its blob is `40496fa7ab17`
-   and `versions.tf`'s is `de0e78def58b`, the same on `main` as on the branch, and the last
-   commit to touch either is `f5261fb`, the third PR #9 review. Check with
-   `git rev-parse <ref>:infra/bootstrap/kill_switch.tf`. But the blob only says the file did
-   not change — the plan is the thing that says no kill-switch *resource* changed, and that
-   is what to read.
-2. **Set the workspace variables** on `fetchpep-dev`, from `terraform output
-   tfc_workspace_variables`: `TFC_GCP_PROVIDER_AUTH`, `TFC_GCP_WORKLOAD_PROVIDER_NAME`,
-   `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL`, `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL`. None is a
+1. **`fetchpep-bootstrap`, locally, and without the kill switch (D-099).**
+
+   The stack holds two unrelated things: the trust setup, which everything else needs now,
+   and the kill switch, which D-072 applies before the game goes public and not during the
+   pilot. So the first apply is **targeted** at the trust resources only. Targeting rather
+   than a `count` switch, deliberately: a `count` would mean editing `kill_switch.tf`, and
+   only George merges a change to that file (D-070). `-target` leaves it untouched.
+
+   **Pass the three kill-switch variables anyway.** [certain] Terraform prompts for every
+   required root variable with no value, whether or not any targeted resource reads one — so
+   without these the plan stops at an interactive prompt and step 1 cannot finish. They are
+   declared in `kill_switch.tf`, nothing in this plan reads them, and they reach no resource.
+   Their validations still apply, so the values must be well formed: `kill_amount >
+   warn_amount`, and the billing id in `000000-000000-000000` form. Use the real ones from
+   D-071 — they change nothing today and are right when the kill switch is applied at launch.
+
+   The billing account id is **not a secret** (`ops/INFRA.ops.md` says as much of the project
+   identifiers). It is in Console → Billing → Account management, or:
+
+   ```
+   gcloud billing projects describe fetchpep-dev --format='value(billingAccountName)'
+   ```
+
+   which prints `billingAccounts/000000-000000-000000`; pass the part after the slash.
+
+   ```
+   cd ~/fetchpep/infra/bootstrap
+   terraform init                    # creates the workspace; then set Execution mode Local
+   terraform plan -out=trust.plan \
+     -var billing_account=<the billing account id> \
+     -var warn_amount=10 -var kill_amount=30 \
+     -target=google_project_service.federation \
+     -target=google_iam_workload_identity_pool.hcp_terraform \
+     -target=google_iam_workload_identity_pool_provider.hcp_terraform \
+     -target=google_project_iam_custom_role.tf_plan \
+     -target=google_project_iam_custom_role.tf_apply \
+     -target=google_service_account.tfc_plan \
+     -target=google_service_account.tfc_apply \
+     -target=google_project_iam_member.tfc_plan \
+     -target=google_project_iam_member.tfc_apply \
+     -target=google_service_account_iam_member.tfc_plan_impersonation \
+     -target=google_service_account_iam_member.tfc_apply_impersonation \
+     -target=google_service_account.nakama \
+     -target=google_project_iam_member.nakama \
+     -target=google_service_account_iam_member.runner_uses_nakama \
+     -target=google_service_account_iam_member.runners_view_nakama \
+     -target=google_pubsub_topic.secret_rotation \
+     -target=google_pubsub_topic_iam_member.secret_manager_publisher
+   ```
+
+   **Read the plan before applying it**, and read it by **address**. A name pattern is not
+   enough: `google_pubsub_topic.budget`, `google_pubsub_topic_iam_member.budget_publisher`
+   and `google_project_iam_custom_role.detach_billing` are all kill-switch resources with no
+   "kill" in the address.
+
+   ```
+   terraform show -json trust.plan | jq -r '.resource_changes[].address' \
+     | sed 's/\[.*\]//' | sort -u > planned.txt
+   ```
+
+   The `sed` is load-bearing. A `for_each` resource appears in the plan with its instance
+   key — `google_project_service.apis["pubsub.googleapis.com"]`, not
+   `google_project_service.apis` — so an exact-match test against the bare address would
+   never catch `apis`, which is the one `for_each` resource in `kill_switch.tf` and the one
+   most likely to be pulled in by accident. Stripping the key first makes the comparison
+   honest.
+
+   Every one of `kill_switch.tf`'s eighteen addresses must be **absent** from it:
+
+   ```
+   for a in google_project_service.apis \
+            google_pubsub_topic.budget \
+            google_pubsub_topic_iam_member.budget_publisher \
+            google_billing_budget.warn \
+            google_billing_budget.kill \
+            google_service_account.kill_switch \
+            google_service_account.kill_trigger \
+            google_service_account.kill_build \
+            google_project_iam_custom_role.detach_billing \
+            google_project_iam_member.kill_switch_detach \
+            google_project_iam_member.kill_build_logs \
+            google_project_iam_member.kill_build_source \
+            google_cloud_run_service_iam_member.kill_trigger_invoke \
+            google_artifact_registry_repository.kill_switch \
+            google_artifact_registry_repository_iam_member.kill_build \
+            google_storage_bucket.source \
+            google_storage_bucket_object.function \
+            google_cloudfunctions2_function.kill_switch ; do
+     grep -qx "$a" planned.txt && echo "STOP: $a is in the plan (D-099)"
+   done
+   ```
+
+   ```
+   verify: the loop prints nothing at all (D-099, D-072)
+   ```
+
+   **If the apply fails on a permission or a disabled service, run the same plan and apply
+   again.** Enabling an API is not instant, and a call made in the same apply that switched
+   it on can arrive before it has propagated. The `depends_on` in `workload_identity.tf`
+   orders it, but ordering is not waiting. Nothing here is harmed by a second run: every
+   resource is created once and named the same way.
+
+   Then `terraform apply trust.plan`.
+
+   **Every later change to this stack needs the same `-target` list, until launch.** A plain
+   `terraform apply` in `infra/bootstrap` would create the whole kill switch, dry-run or not.
+   That is George's decision to make once (D-070, D-072), not something that happens because
+   a flag was left off.
+
+   The remaining resources stay in the configuration and out of the state, and `terraform
+   plan` will keep showing them as "to add" until the launch step applies them. That is the
+   intended reading of D-072, not drift.
+
+2. **Set the workspace variables on `fetchpep-dev`.** The workspace does not exist yet, so
+   create it first:
+
+   ```
+   cd ~/fetchpep/infra/dev
+   terraform init                    # creates the workspace fetchpep-dev
+   ```
+
+   Then, before any plan, in the HCP Terraform UI:
+
+   - Settings → General → **Execution mode: Remote**, **Apply method: Manual apply**,
+     **Working Directory: `infra/dev`** (section 20 — the last one is load-bearing).
+   - Variables → add four, all of category **Environment variable**, not Terraform variable:
+
+     ```
+     TFC_GCP_PROVIDER_AUTH                 true
+     TFC_GCP_WORKLOAD_PROVIDER_NAME        <from the bootstrap output>
+     TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL    <from the bootstrap output>
+     TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL   <from the bootstrap output>
+     ```
+
+     The three values come from `terraform output tfc_workspace_variables` in
+     `infra/bootstrap`. None is a secret.
+
+   - Variables → add one **Terraform variable**, marked **HCL**:
+
+     ```
+     tunnel_users   ["user:<the address that will reach the VM>"]
+     ```
+
+     Empty by default, and while it is empty nobody can open a tunnel to the VM —
+     including whoever just applied. It is a workspace variable rather than `-var` so that
+     it survives the next apply.
+
+   ```
+   verify: the workspace page reads Remote · Manual apply · infra/dev
+   ```
+
+3. **Create the secret containers, before the VM exists.** The containers must exist before
+   there are versions to put in them, and the VM refuses to start without a version of every
    secret.
-3. **Get the secret containers made before the VM boots.** The containers must exist before
-   there are versions to put in them, and the VM refuses to start without a version of
-   every secret. Two ways, and which one is available depends on the workspace:
 
-   - `terraform apply -target=google_secret_manager_secret.nakama` — but [likely] HCP
-     Terraform refuses a CLI-driven apply on a workspace connected to VCS, and `fetchpep-dev`
-     is Remote.
-   - **The fallback, which always works:** apply the whole stack and let the first boot
-     fail. The startup script exits with `a secret came back empty` and the names, nothing
-     is half-configured, and step 4 then step 6's reboot finish the job.
+   ```
+   terraform apply -target=google_secret_manager_secret.nakama
+   ```
+
+   [likely] This works because `fetchpep-dev` is CLI-driven: O-31 is not done, so no VCS
+   provider is connected, and a CLI-driven workspace accepts `-target` from the command
+   line. **If HCP Terraform refuses it** — which it does on a VCS-connected workspace — take
+   the fallback instead: apply the whole stack at step 5, let the first boot fail (the
+   startup script stops at the **first** secret it cannot read and names that one), then do
+   step 4 and step 4a. Step 4 adds a version to all eight, so one name is enough to act on.
+
 4. **Create a version of each secret.** Values never pass through Terraform, a file, or an
    agent (D-089):
 
@@ -409,16 +635,35 @@ Each step needs the one before it. Steps 1 and 3 are George's.
 
    `tr '+/' '-_'` is required, not cosmetic: every value must match `^[A-Za-z0-9_-]+$`. The
    database address is a URL where a raw `@` or `:` changes which host is dialled, and
-   `render-config.sh` substitutes with `sed`. It refuses to render anything else.
+   `render-config.sh` substitutes with `sed`. The startup script refuses anything else, by
+   name, before it writes a thing.
 
    ```
    verify: gcloud secrets versions list <name> --project fetchpep-dev   →   one ENABLED
    ```
-5. **Apply the rest**, with `tunnel_users` naming whoever needs to reach the VM:
+
+4a. **Only if step 3 took the fallback: restart the VM**, so the boot that failed for want
+   of secrets runs again now they exist.
 
    ```
-   terraform apply -var 'tunnel_users=["user:<the address>"]'
+   gcloud compute instances stop fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev
+   gcloud compute instances start fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev
    ```
+
+   Stop and start, not `ssh … sudo reboot`: at this point `tunnel_users` may still be empty,
+   so there is no way in to type a command. It is also a clean shutdown, unlike
+   `instances reset`, which is a power cut and puts PostgreSQL through crash recovery.
+
+5. **Apply the rest.**
+
+   ```
+   terraform apply
+   ```
+
+   from `~/fetchpep/infra/dev`, which uploads the repository root because of the working
+   directory setting. The plan is created remotely and waits for a click, because the
+   workspace is Manual apply.
+
 6. **Watch the first boot.** The startup script is the whole of the install:
 
    ```
@@ -426,15 +671,106 @@ Each step needs the one before it. Steps 1 and 3 are George's.
      --zone europe-west2-a --project fetchpep-dev | grep fetchpep-startup
    ```
 
+   The first boot is not quick — it formats a disk, pulls two images over NAT and downloads
+   Compose. Give it a few minutes and repeat the command until the last line is `up` or an
+   error.
+
    ```
    verify: the last line reads   fetchpep-startup: up
    ```
+
+   Anything else names its own cause: `data disk not attached`, `<NAME>: no readable
+   version`, `<NAME> has a character outside [A-Za-z0-9_-]`, or
+   `…/bin/docker-compose will not run — is …/bin still noexec?`.
+
 7. **Reach it.** Both ports are on the VM's loopback, so a forward is the only way in:
 
    ```
    gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a \
-     --project fetchpep-dev --tunnel-through-iap -- -L 7350:localhost:7350
+     --project fetchpep-dev --tunnel-through-iap \
+     -- -L 7351:localhost:7351 -L 7350:localhost:7350
    ```
+
+   Then `http://localhost:7351` for the console, and 7350 for the doors. Whoever runs it has
+   to be in `tunnel_users` (step 2).
+
+8. **Prove it end to end.** This is brief B-002's *proven when*, and it is the only step that
+   shows the whole thing working rather than each piece being present. Leave the forward from
+   step 7 open in one Cloud Shell tab and run this in another.
+
+   **Start in the repository**, because the release file is read by a relative path and a
+   new Cloud Shell tab opens in `~`:
+
+   ```
+   cd ~/fetchpep
+   ```
+
+   The HTTP key is a secret, so it comes out of Secret Manager into a shell variable and is
+   never typed or pasted:
+
+   ```
+   HTTP_KEY=$(gcloud secrets versions access latest --secret nakama-http-key --project fetchpep-dev)
+   ```
+
+   [certain] It does still reach `curl`'s argv below, so it is visible in `ps` to other
+   processes on this Cloud Shell VM — George's own machine, for the minute the test takes.
+   That is a different risk from the VM's own handling, where the startup script keeps every
+   value off the command line. `unset HTTP_KEY` at the end, and do not leave the tab open.
+
+   **Publish release 1.** The payload is a JSON *string* containing the file, which is what
+   Nakama's HTTP RPC expects:
+
+   ```
+   PAYLOAD=$(python3 -c "import json;print(json.dumps(open('services/nakama/releases/release-0001.json').read()))")
+   curl -s -X POST "http://127.0.0.1:7350/v2/rpc/publish_release?http_key=$HTTP_KEY" \
+     -H 'Content-Type: application/json' -d "$PAYLOAD"
+   ```
+
+   **Read it back:**
+
+   ```
+   curl -s -X POST "http://127.0.0.1:7350/v2/rpc/read_catalogue?http_key=$HTTP_KEY" \
+     -H 'Content-Type: application/json' -d '""'
+   ```
+
+   **And check the door log wrote the row**, over the same forward, from inside the VM:
+
+   ```
+   gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev \
+     --tunnel-through-iap --command \
+     'sudo docker exec fetchpep-nakama-postgres-1 psql -U nakama -d nakama -X \
+        -c "SELECT id, door, outcome, idempotency_key FROM directory.door_log ORDER BY id"'
+   ```
+
+   **Nakama wraps an RPC result**, so the reply is a JSON object whose `payload` is a JSON
+   *string* — not the bare object. That is expected, not a fault:
+
+   ```
+   {"payload":"{\"outcome\":\"applied\",\"release\":1,…}"}
+   ```
+
+   Pipe it through `python3 -c 'import sys,json;print(json.load(sys.stdin)["payload"])'` to
+   read it, or add `&unwrap` to the URL.
+
+   ```
+   verify: publish_release  →  payload {"outcome":"applied","release":1,"phases":1,
+                               "species":1,"coats":1,"door_log_id":1}
+           read_catalogue   →  payload count 1, the Reedling, artist and creator Joshua
+           door_log         →  one row, publish / applied / release-0001
+   ```
+
+   A second identical `publish_release` must return `{"outcome":"duplicate",…}` and write
+   nothing. That is the idempotency key doing its job, and it is worth one extra call to see.
+
+   Then:
+
+   ```
+   unset HTTP_KEY
+   ```
+
+   If all three pass, the VM is doing what brief B-002 asked for. Anything else: the
+   containers' logs, over the forward, with
+   `sudo docker logs fetchpep-nakama-nakama-1 --tail 50`.
 
 ## 22. Rotating a secret
 
@@ -459,7 +795,23 @@ A clean shutdown costs a few seconds and skips that. `stop` then `start` is equa
 The reboot re-runs the startup script, which stops the containers, reads `latest`, rewrites
 `.env` and `nakama.runtime.yml`, and brings everything up **force-recreated** — which is
 what makes a rotation take effect rather than leaving the old value in a running container.
-Then disable the old version.
+
+Then deal with the old version. **Disable it, and destroy it a week later** —
+
+```
+gcloud secrets versions disable <name> <n> --project fetchpep-dev     # now
+gcloud secrets versions destroy <name> <n> --project fetchpep-dev     # a week later
+```
+
+— for two reasons. Disabling is reversible, so it is the right first move if the new value
+turns out to be wrong; a week is long enough to find that out. And [certain] a disabled
+version still bills at $0.06 a month, so leaving every old version disabled costs about
+$0.12 a month more for every month of rotations — roughly $1.50 a month after a year, for
+values nobody can use. Destroying is irreversible, which is the point of the week.
+
+The exception is `invite-email-hmac-key`: keep old versions **enabled** until no open invite
+refers to them (`directory.fold_invite.hmac_key_version`), then disable and destroy on the
+same delay.
 
 What each one costs, which is the part worth knowing before starting:
 

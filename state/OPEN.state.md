@@ -85,7 +85,11 @@ anchors on its own location instead of `process.cwd()`. Proven from four working
 directories, one of them outside the repo. O-73 itself — that Bash writes are not seen at
 all — stands.
 
-**O-74 · `services/nakama/build/index.js` is committed and nothing checks it matches `src/`.**
+**O-74 · resolved 25 Sep by D-097.** `checks/bundle.check.sh` rebuilds the bundle into a
+temporary directory and compares it byte for byte; it runs in its own CI job, because it is
+the only check that needs a toolchain. **Evidence** in the issue #24 PR: it passes on the
+branch, and fails both ways it can — one character changed in `build/index.js`, and `src/`
+changed without a rebuild. The item as it was raised:
 Nakama loads one JavaScript file. The VM has no build step and there is no image registry
 of ours (the kill switch's Artifact Registry repository is the kill switch's, D-070), so
 `infra/dev/vm_nakama.tf` reads the built file with `file()` and delivers it in instance
@@ -139,7 +143,10 @@ rather than a formality, and so a failure is recognised instead of debugged from
    COS], so the Compose binary gets `app_dir/bin` its own `mount --bind` plus
    `remount,exec`. The startup script runs `docker-compose version` straight afterwards and
    exits with the mount options in the log if it did not take. Unproven until a VM boots.
-2. **The apply runner's role set.** Nine roles and a custom one, chosen narrow on purpose.
+2. **The apply runner's role set.** Four predefined roles and one custom one, chosen narrow
+   on purpose — it was nine before the PR #20 reviews took `pubsub.admin`,
+   `serviceUsageAdmin`, `serviceAccountAdmin`, project-wide `serviceAccountUser` and
+   `secretmanager.admin` out of it, each of which reached the kill switch or a secret value.
    A missing permission fails the apply with the permission named. The fix is another named
    role, never `roles/editor`.
 3. **The Secret Manager service agent.** `infra/bootstrap/workload_identity.tf` grants
@@ -155,6 +162,17 @@ rather than a formality, and so a failure is recognised instead of debugged from
 5. **The HCP Terraform workspace's working directory** must be `infra/dev` with the whole
    repository uploaded, because `vm_nakama.tf` reads `../../services/nakama/...`. Written up
    in `ops/RUNBOOK.ops.md` Part 5, step 20.
+
+**O-82 · resolved 25 Sep by D-100.** `CLAUDE.md` section 9 counted the checks — "Six checks
+run in CI … three more run only in the pre-push hook" — and D-097 plus O-42 made every number
+in that sentence wrong. George chose to drop the count rather than correct it, so section 9
+now says "Every check in `checks/` runs in CI on every push and blocks the merge; most also
+run in the pre-push hook" and routes to `checks/README.md`, which carries the table. The
+router cannot go stale when a check is added. **The proposal in this item said "nine of them
+also run in the hook", and that was wrong too:** the hook runs **eight**
+(`.githooks/pre-push.bash`), not nine — `authority` needs a base ref and `bundle` needs
+`npm ci`. Caught by the PR #25 review, and it is the argument for D-100 rather than against
+it: a count restated away from the list it counts is a count that drifts.
 
 **O-81 · `.claude/settings.json` has no tier in `CLAUDE.md` section 6.**
 It is the file that decides whether the write guard runs at all, and section 6's table says
@@ -471,9 +489,13 @@ rather than about a loose binary.
   placed the files (commit `d8e789d`)
 - **O-41 · Crash reporting — resolved 24 Sep by D-059.** Unity's built-in Diagnostics,
   Unity 6.2 or later
-- **O-42 · CI runs six of the eight checks.** `secrets`, `versions` and `naming` exist only
-  in `.githooks/pre-push`, which has never run (O-35), so they gate nothing. Wiring them in
-  is a workflow edit — execution-granting, so it cannot be written remotely
+- **O-42 · resolved 25 Sep.** `secrets`, `versions` and `naming` existed only in
+  `.githooks/pre-push`, which `--no-verify` skips and a fresh clone does not have, so they
+  gated nothing. All three are now steps in `.github/workflows/checks.yml`, with `bundle`
+  (D-097) in a second job. The blocker was that a workflow edit needs the `workflow` scope
+  and could not be written remotely; the Cloud Shell seat's token has it. **Evidence:**
+  `gh auth status` → `Token scopes: 'gist', 'read:org', 'repo', 'workflow'`, and the push of
+  the issue #24 branch carried the workflow change
 - **O-46 · D-039 against reality.** D-039, George's, says the repo lives at `C:\dev\fetchpep`
   and nothing goes in a cloud-synced folder. The working copy is under
   `C:\Users\laure\OneDrive\Desktop\`, and on 24 Sep George said sync is off for it and the

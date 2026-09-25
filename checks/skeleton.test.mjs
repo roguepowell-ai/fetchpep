@@ -1,7 +1,7 @@
 // Skeleton test for spec/DATA-MODEL.spec.md. Written for issue #12, committed under #16.
 // Reads Migration 0001 and 0002 straight out of the spec, applies them to an embedded
 // PostgreSQL (PGlite, with ltree), and checks what the spec claims. It is not one of the
-// nine contract checks — `checks/README.md` lists those — because it needs a package that
+// ten contract checks — `checks/README.md` lists those — because it needs a package that
 // is deliberately not installed here.
 //
 // PGlite is test-only and is never installed into this repo. D-084 covers test-only

@@ -1,11 +1,23 @@
+# The Caught tier (CLAUDE.md section 8). checks/README.md says what each check fails on.
+#
+# Actions are pinned to a commit SHA, not a tag. [certain] A tag is movable: `@v4` is
+# whatever the owner last pointed it at, so pinning to one is trusting a third party not to
+# change what runs in our CI later. The tag is kept in the comment so an upgrade is legible.
+#
+# `permissions` is set explicitly and read-only. The default for a repository can be
+# read-write, and neither job writes anything.
+
 name: contract
 on: [push, pull_request]
+
+permissions:
+  contents: read
 
 jobs:
   contract:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: router size
@@ -20,3 +32,30 @@ jobs:
         run: bash checks/banned-terms.check.sh
       - name: write authority
         run: bash checks/authority.check.sh "origin/${{ github.base_ref || 'main' }}"
+
+      # These three existed only in .githooks/pre-push, which `--no-verify` bypasses and a
+      # fresh clone does not have until `core.hooksPath` is set. So they gated nothing that
+      # mattered (O-42). They are cheap and need no toolchain, so there is no reason for
+      # them to be local-only.
+      - name: secrets
+        run: bash checks/secrets.check.sh
+      - name: versions
+        run: bash checks/versions.check.sh
+      - name: naming
+        run: bash checks/naming.check.sh
+
+  # Its own job because it is the only check that needs a toolchain, and a slow job should
+  # not hold up nine fast ones. D-097.
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Exact, from .nvmrc, which ops/VERSIONS.ops.md records. A major-only '24' would
+          # mean the compiler's host changes underneath a byte-for-byte comparison.
+          node-version-file: services/nakama/.nvmrc
+          cache: npm
+          cache-dependency-path: services/nakama/package-lock.json
+      - name: nakama bundle matches its source
+        run: bash checks/bundle.check.sh

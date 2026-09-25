@@ -18,12 +18,29 @@
 # by the one apply that already runs with George's own rights, and `infra/dev` only reads it.
 
 # ------------------------------------------------------------------------ APIs
-# The two the federation itself needs. Everything in the kill switch's list is enabled by
-# `google_project_service.apis` in kill_switch.tf; a second resource for the same service
-# would fight it, so these are only the ones that file does not already name.
-
+# **Every API this stack needs is declared here, including four that `kill_switch.tf` also
+# names.**
+#
+# This file used to declare only what that one did not, and lean on its
+# `google_project_service.apis` for the rest. D-099 ended that: the first apply is targeted
+# at the trust resources and excludes every `kill_switch.tf` resource, `apis` among them. So
+# on a fresh project nothing would enable `iam` or `cloudresourcemanager`, and the first
+# service account, custom role or IAM binding would fail with SERVICE_DISABLED. What this
+# stack needs, this stack owns.
+#
+# Two Terraform resources naming one service is untidy, and it is the least bad of three:
+# the alternatives were editing `kill_switch.tf` (D-070) or breaking D-099. It is safe
+# because enabling a service is idempotent and each resource has its own address in state,
+# so they do not fight — **and that safety rests entirely on `disable_on_destroy = false` on
+# both sides.** Setting it `true` in either file would let a destroy switch off a service
+# the kill switch needs. Do not.
 resource "google_project_service" "federation" {
   for_each = toset([
+    # Also named in kill_switch.tf. See the note above.
+    "cloudresourcemanager.googleapis.com", # every google_project_iam_member call
+    "iam.googleapis.com",                  # service accounts, custom roles, the WIF pool
+    "pubsub.googleapis.com",               # the rotation topic
+    # This stack's alone.
     "iamcredentials.googleapis.com",
     "secretmanager.googleapis.com",
     "sts.googleapis.com",
@@ -85,11 +102,22 @@ resource "google_iam_workload_identity_pool_provider" "hcp_terraform" {
 # exactly what D-089 and the design of `infra/dev/secrets.tf` are for — Terraform creates
 # containers and never touches a value — and a role that contradicts the design is the
 # wrong role, however convenient.
+#
+# **What this does not claim.** The apply account still reaches a value *indirectly*, two
+# ways, and both are inherent to being the thing that builds the stack:
+#   - `secretmanager.secrets.setIamPolicy` can grant `secretAccessor` to anything, itself
+#     included, and then read;
+#   - `compute.instanceAdmin.v1` can set a VM's startup script, and the VM may read the
+#     secrets it is entitled to.
+# So this role is a guard against a careless read, not against a determined one. What it
+# does buy is that a value cannot appear in a plan, in state, or in a log by accident, which
+# is the failure R-SEC-01 is about. Closing the indirect paths means an apply account that
+# cannot set IAM or create instances, which is an apply account that cannot apply.
 
 resource "google_project_iam_custom_role" "tf_apply" {
   role_id     = "fetchpepDevTfApply"
   title       = "fetchpep-dev Terraform apply"
-  description = "Secret containers and IAP tunnel policy. Deliberately excludes every permission that can read or write a secret value."
+  description = "Secret containers and IAP tunnel policy. Excludes every permission that reads or writes a secret value directly; see the comment above for what it still reaches indirectly."
 
   permissions = [
     "secretmanager.secrets.create",
@@ -109,8 +137,14 @@ resource "google_project_iam_custom_role" "tf_apply" {
     "serviceusage.services.enable",
     "serviceusage.services.get",
     "serviceusage.services.list",
+    # Enabling a service returns a long-running operation, and the provider polls it.
+    "serviceusage.operations.get",
     "resourcemanager.projects.get",
   ]
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 resource "google_project_iam_custom_role" "tf_plan" {
@@ -127,6 +161,10 @@ resource "google_project_iam_custom_role" "tf_plan" {
     "serviceusage.services.list",
     "resourcemanager.projects.get",
   ]
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 # --------------------------------------------------------------- the runners
@@ -138,39 +176,52 @@ resource "google_service_account" "tfc_plan" {
   account_id   = "fetchpep-dev-tfc-plan"
   display_name = "HCP Terraform — plan phase, fetchpep-dev"
   description  = "Read-only. Impersonated by plan runs through workload identity (D-064). Holds no key."
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 resource "google_service_account" "tfc_apply" {
   account_id   = "fetchpep-dev-tfc-apply"
   display_name = "HCP Terraform — apply phase, fetchpep-dev"
   description  = "Creates what infra/dev declares. Impersonated by apply runs only. Holds no key."
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
+# A map with **literal keys**, not a set. `for_each` keys have to be known at plan time, and
+# a custom role's `id` is "known after apply" on a project where it does not exist yet — so a
+# set built from it cannot be keyed and the plan fails with `Invalid for_each argument`
+# before it creates anything. The value may be unknown; the key may not.
 resource "google_project_iam_member" "tfc_plan" {
-  for_each = toset([
-    "roles/compute.viewer",
-    google_project_iam_custom_role.tf_plan.id,
-  ])
+  for_each = {
+    compute_viewer = "roles/compute.viewer"
+    custom         = google_project_iam_custom_role.tf_plan.id
+  }
 
   project = local.project_id
   role    = each.value
   member  = google_service_account.tfc_plan.member
 }
 
+# Literal keys, for the reason above.
 resource "google_project_iam_member" "tfc_apply" {
-  for_each = toset([
+  for_each = {
     # infra/dev/vm_nakama.tf — the instance, its boot disk, its metadata
-    "roles/compute.instanceAdmin.v1",
+    instance_admin = "roles/compute.instanceAdmin.v1"
     # infra/dev/network.tf — the VPC, the subnet, Cloud NAT and the router
-    "roles/compute.networkAdmin",
+    network_admin = "roles/compute.networkAdmin"
     # infra/dev/network.tf — the firewall rules
-    "roles/compute.securityAdmin",
+    security_admin = "roles/compute.securityAdmin"
     # infra/dev/snapshots.tf — the snapshot schedule, and the data disk
-    "roles/compute.storageAdmin",
+    storage_admin = "roles/compute.storageAdmin"
     # infra/dev/secrets.tf — the secret containers and who may read each one, and
     # infra/dev/network.tf — who may open an IAP tunnel. Never a secret value.
-    google_project_iam_custom_role.tf_apply.id,
-  ])
+    custom = google_project_iam_custom_role.tf_apply.id
+  }
 
   project = local.project_id
   role    = each.value
@@ -210,6 +261,9 @@ resource "google_pubsub_topic" "secret_rotation" {
     allowed_persistence_regions = [local.location]
   }
 
+  # Only this file's own API resource. Depending on the kill switch's `apis` would drag a
+  # `kill_switch.tf` resource into the targeted first apply, which is exactly what D-099
+  # forbids — see the note above `google_project_service.federation`.
   depends_on = [google_project_service.federation]
 }
 
@@ -232,6 +286,10 @@ resource "google_service_account" "nakama" {
   account_id   = "fetchpep-dev-nakama"
   display_name = "Nakama VM"
   description  = "The Nakama VM's own identity. Reads its secrets and writes logs. Nothing else."
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 # Logs and metrics only. Access to a secret is granted per secret, in infra/dev/secrets.tf.
@@ -258,11 +316,12 @@ resource "google_service_account_iam_member" "runner_uses_nakama" {
 }
 
 # Both phases need to read it: infra/dev looks it up with a data source.
+# Literal keys again: a service account's `member` is not known until it exists.
 resource "google_service_account_iam_member" "runners_view_nakama" {
-  for_each = toset([
-    google_service_account.tfc_plan.member,
-    google_service_account.tfc_apply.member,
-  ])
+  for_each = {
+    plan  = google_service_account.tfc_plan.member
+    apply = google_service_account.tfc_apply.member
+  }
 
   service_account_id = google_service_account.nakama.name
   role               = "roles/iam.serviceAccountViewer"
