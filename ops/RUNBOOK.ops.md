@@ -72,8 +72,11 @@ gh repo clone roguepowell-ai/fetchpep
 the repo.
 
 ```
-verify: git -C fetchpep remote -v   →   roguepowell-ai/fetchpep
+verify: cd fetchpep && git remote -v   →   roguepowell-ai/fetchpep
 ```
+
+`cd` rather than `git -C`, here as everywhere: Part 4 makes it the rule, and an example
+that breaks it is the one people copy.
 
 ## 5. Place the contract
 
