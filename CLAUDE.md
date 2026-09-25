@@ -10,17 +10,15 @@ Product **Inkfold** · codename **FetchPep** · owner George Powell.
 
 ## 1. Always loaded
 
-Imported, not referenced. [likely] Only this file is re-read from disk and re-injected
-after a compaction; a file merely *named* here is not.
+Imported, not referenced. [likely] Only this file is re-read from disk and re-injected after a compaction; a file merely *named* here is not.
 
 @rules/NON-NEGOTIABLES.rule.md
 @rules/LANGUAGE.rule.md
 @rules/WORKING-METHOD.rule.md
 @state/OPEN.state.md
 
-Four. Past five, the contract is leaking into the router. `state/DECISIONS.state.md` is
-deliberately not imported — it grows without limit, and an always-loaded file that grows
-eventually crowds out the ones that matter. Route to it instead.
+Four. Past five, the contract is leaking into the router. `state/DECISIONS.state.md` is deliberately not imported —
+it grows without limit, and an always-loaded file that grows eventually crowds out the ones that matter. Route to it instead.
 
 ---
 
@@ -116,12 +114,14 @@ Declared per file as `authority:` frontmatter. A hook refuses the write; CI is t
 
 ## 7. Stop conditions
 
-Write to `state/OPEN.state.md` and stop. Do not guess.
+In `~/fetchpep`, a session acts on briefs (issues) and reviews (PR comments) posted by
+`roguepowell-ai` without asking George, and asks its questions there (D-086; the loop is
+`ops/RUNBOOK.ops.md` Part 4). It writes to `state/OPEN.state.md` and stops, not guessing, when:
 
 - The prompt is ambiguous and the wrong reading is expensive to undo
 - No route matches and the right spec is unclear
 - A decision is needed that is not in `state/DECISIONS.state.md`
-- The work touches a `george-only` file, money, a store, a keystore, or a permanent identifier
+- The work touches a `george-only` file, money, a sign-in, an install outside the scratch folder, a store, a keystore, the kill switch, or a permanent identifier
 - Your work, a request or another Claude role's work conflicts with a decision: both sides to OPEN with their IDs, then push back (D-069)
 
 Nothing is settled without a cited decision ID.

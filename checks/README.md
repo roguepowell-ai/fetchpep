@@ -26,6 +26,19 @@ extended (O-42).
 | `versions.check.sh` | `ops/VERSIONS.ops.md` disagrees with what is actually pinned | hook only |
 | `naming.check.sh` | A contract file is named outside the convention | hook only |
 
+## Not one of the nine
+
+`skeleton.test.mjs` is a **spec test**, not a gate. It reads Migration 0001 and 0002 out of
+`spec/DATA-MODEL.spec.md` and applies them to an embedded PostgreSQL, so the spec's own
+*Evidence* section can be reproduced after a merge rather than quoted from a pull request.
+It is not in CI and not in the hook, because it needs PGlite, which is test-only and is
+never installed into this repo (D-084 — the install goes in the developer's scratch folder):
+
+```
+cd <scratch folder> && npm install --save-exact @electric-sql/pglite@0.3.16
+cd <repo> && PGLITE_DIR=<scratch folder> node checks/skeleton.test.mjs spec/DATA-MODEL.spec.md
+```
+
 ## The two that matter most
 
 **`router-orphans.check.sh`** — a contract file nothing routes to is not merely unread.

@@ -794,11 +794,20 @@ avatar pieces unlocked by play; where NPCs stand.
 
 ### Evidence
 
-Command: `node skeleton.test.mjs spec/DATA-MODEL.spec.md`, 25 Sep 2026. The test reads
-Migration 0001 and 0002 straight out of this file and applies them to an embedded
-PostgreSQL 17.5 (PGlite 0.3.16, with `ltree`). The VM will run 16; nothing used is newer than
-16. The script is in the issue #12 PR description; it is not in the repo. It replaces the
-earlier 18-check test, which ran from the FetchPep Project and was never in the repo.
+The test is **`checks/skeleton.test.mjs`**, in this repo, so this section can be reproduced
+rather than taken on trust:
+
+```
+cd <scratch folder> && npm install --save-exact @electric-sql/pglite@0.3.16
+cd <repo> && PGLITE_DIR=<scratch folder> node checks/skeleton.test.mjs spec/DATA-MODEL.spec.md
+```
+
+Run 25 Sep 2026. The test reads Migration 0001 and 0002 straight out of this file and
+applies them to an embedded PostgreSQL 17.5 (PGlite 0.3.16, with `ltree`). The VM will run
+16; nothing used is newer than 16. PGlite is test-only and is deliberately not installed
+into this repo (D-084), which is why this is not one of the nine checks — see
+`checks/README.md`. It replaces the earlier 18-check test, which ran from the FetchPep
+Project and was never in the repo.
 
 **Result: 30 passed, 0 failed, exit 0.**
 

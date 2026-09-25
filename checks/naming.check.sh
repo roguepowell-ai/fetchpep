@@ -37,7 +37,7 @@ check_dir spec           '\.spec\.md$'          upper
 check_dir ops            '\.ops\.md$'           upper
 check_dir state          '\.state\.md$'         upper
 check_dir .claude/rules  '\.md$'                lower
-check_dir checks         '\.(check\.sh|txt)$'   lower
+check_dir checks         '\.(check\.sh|test\.mjs|txt)$'   lower
 check_dir hooks          '\.(mjs|js)$'          lower
 
 [ "$fail" -eq 0 ] && echo "ok naming: contract files follow the convention"

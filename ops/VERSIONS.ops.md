@@ -25,6 +25,7 @@ version" does not work — this does, because it is told rather than remembered.
 | Terraform `hashicorp/archive` | `2.8.1` | `versions.tf` · `.terraform.lock.hcl` | Zips the kill-switch source |
 | Cloud Run functions runtime | `nodejs24` | `infra/bootstrap/kill_switch.tf` | The kill switch |
 | `@google-cloud/functions-framework` | `5.0.5` | `infra/bootstrap/function/package.json` · `package-lock.json` | The kill switch's only declared dependency. Pinned by D-073 under R-SEC-04; an upgrade is its own change, and George's after merge (D-070) |
+| `@electric-sql/pglite` | `0.3.16` | `checks/skeleton.test.mjs` header · `checks/README.md` | Test-only, and the one thing here **not** installed in the repo: D-084 puts a test-only package in the developer's scratch folder, so there is no manifest to pin it in. The version is pinned by the `npm install --save-exact` line both files carry. Embeds PostgreSQL 17.5; the VM runs 16 (D-063) |
 | Nakama | `TBD` | docker tag, exact — never `:latest` | |
 | Postgres | `TBD` | Neon project setting | |
 | dbt | `TBD` | `requirements.txt`, exact | |
