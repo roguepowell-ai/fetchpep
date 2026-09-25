@@ -336,29 +336,78 @@ PR (D-069). Anything else the brief did not ask for is a question on the issue o
 Operations runs everything here, in Cloud Shell, with George signed in (D-064, D-067). The
 developer never applies. Nothing in this part is automatic.
 
-## 20. Execution mode: the two workspaces differ
+## 20. Before anything: the two workspaces, and the tool
 
-| Workspace | Execution mode | Why |
-|---|---|---|
-| `fetchpep-bootstrap` | **Local** | It creates the trust that everything else authenticates with, so it cannot authenticate with it. It runs in Cloud Shell under George's own sign-in and only the state is remote (O-67) |
-| `fetchpep-dev` | **Remote** | [likely] HCP Terraform's dynamic provider credentials are minted for the run, in HCP Terraform. A local run has no such token and would need a key instead, which is the thing D-064 removes |
+### The tool
 
-The organisation default stays Remote. `fetchpep-bootstrap` is the exception, set by hand.
+Terraform is **not installed** on Cloud Shell — `/google/bin/terraform` is a stub that
+prints installation instructions. Fetch the pinned version and check it, per session:
 
-**`fetchpep-dev`'s working directory must be `infra/dev`.** [likely] `vm_nakama.tf` reads
-`../../services/nakama/...` with `file()`, so the whole repository has to be in the run's
-upload, with the stack one directory inside it. A workspace configured with `infra/dev` as
-its *root* rather than its working directory would upload only that folder, and every
-`file()` would fail at plan.
+```
+cd ~ && mkdir -p tfbin && cd tfbin
+curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_SHA256SUMS
+curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_amd64.zip
+sha256sum -c --ignore-missing terraform_1.16.4_SHA256SUMS
+unzip -o terraform_1.16.4_linux_amd64.zip && export PATH="$HOME/tfbin:$PATH"
+terraform login          # a browser token for app.terraform.io, once per machine
+```
+
+```
+verify: terraform_1.16.4_linux_amd64.zip: OK
+        terraform version   →   Terraform v1.16.4
+        terraform login     →   Retrieved token for user <george>
+```
+
+`required_version` is exact in both stacks, so a different Terraform refuses to run at all.
+
+### The two workspaces differ, and neither default is right
+
+| Workspace | Execution mode | Apply method | Working directory |
+|---|---|---|---|
+| `fetchpep-bootstrap` | **Local** | n/a — the apply happens in Cloud Shell | — |
+| `fetchpep-dev` | **Remote** | **Manual apply** | **`infra/dev`** |
+
+Each is created by its stack's first `terraform init`, and each is created **wrong**: the
+organisation default is Remote execution and, on a new workspace, auto-apply is off but the
+working directory is empty. So the order is always *init, then fix the settings, then plan*.
+
+**`fetchpep-bootstrap` must be Local** before its first plan (O-67). It creates the trust
+that everything else authenticates with, so it cannot authenticate with it; a remote run has
+no Google credentials and fails. Workspace → Settings → General → Execution mode → Local.
+
+**`fetchpep-dev` must be Remote**, because its credentials are minted per run through
+workload identity (D-064). A local run would need a key, which is the thing D-064 removes.
+It must also be **Manual apply** (O-29): an auto-apply workspace provisions real
+infrastructure with nobody clicking, which `CLAUDE.md` section 2 forbids.
+
+**And its working directory must be `infra/dev`, set before the first run.** This is not
+tidiness. `infra/dev/vm_nakama.tf` reads `../../services/nakama/...` with `file()`, and what
+a CLI-driven run uploads depends on this setting:
+
+> "When the local working directory matches the name of the configured working directory,
+> Terraform uploads one or more parents of the local working directory, according to the
+> depth of the configured working directory."
+>
+> "When the local working directory does not match the name of the configured working
+> directory, Terraform assumes it is the root of the configuration directory, and uploads
+> only the local working directory."
+
+— [CLI-driven runs](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/cli)
+
+`infra/dev` is two levels deep, so with the setting in place Terraform uploads two parents —
+the repository root — and the `file()` calls resolve. With the setting empty it uploads
+`infra/dev` alone and **every one of them fails at plan**. The same setting is what makes a
+VCS-driven run work later (O-31), so it is right either way.
 
 ## 21. Apply order
 
-Each step needs the one before it. Steps 1 and 3 are George's.
+Each step needs the one before it.
 
-0. **Create Secret Manager's service agent, before anything else.** [likely] The agent is
-   created the first time the service is used, and the bootstrap stack grants it publisher
-   on the rotation topic — a binding to a principal that does not exist yet is refused. One
-   command, and it is safe to repeat:
+0. **Secret Manager's service agent.** [likely] The agent is created the first time the
+   service is used, and the bootstrap stack grants it publisher on the rotation topic — a
+   binding to a principal that does not exist yet is refused. Nothing has enabled Secret
+   Manager at this point, because the bootstrap stack is what would, and it runs next. Both
+   commands are safe to repeat:
 
    ```
    gcloud services enable secretmanager.googleapis.com --project fetchpep-dev
@@ -366,38 +415,113 @@ Each step needs the one before it. Steps 1 and 3 are George's.
      --project fetchpep-dev
    ```
 
-   The `enable` comes first because at this point nothing has enabled Secret Manager: the
-   bootstrap stack does, but this step runs before it. Both commands are safe to repeat.
-
    ```
    verify: it prints   service-424117215837@gcp-sa-secretmanager.iam.gserviceaccount.com
    ```
-1. **`fetchpep-bootstrap`, locally.** Creates the workload identity pool and provider, the
-   plan and apply service accounts, the two custom roles, the VM's own service account and
-   the secret rotation topic. The kill switch is in the same stack but a separate question
-   (D-070, D-072).
 
-   **Read the plan before applying.** It should show **no change to any kill-switch
-   resource**. Nothing in this brief touches `kill_switch.tf`: its blob is `40496fa7ab17`
-   and `versions.tf`'s is `de0e78def58b`, the same on `main` as on the branch, and the last
-   commit to touch either is `f5261fb`, the third PR #9 review. Check with
-   `git rev-parse <ref>:infra/bootstrap/kill_switch.tf`. But the blob only says the file did
-   not change — the plan is the thing that says no kill-switch *resource* changed, and that
-   is what to read.
-2. **Set the workspace variables** on `fetchpep-dev`, from `terraform output
-   tfc_workspace_variables`: `TFC_GCP_PROVIDER_AUTH`, `TFC_GCP_WORKLOAD_PROVIDER_NAME`,
-   `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL`, `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL`. None is a
+1. **`fetchpep-bootstrap`, locally, and without the kill switch (D-099).**
+
+   The stack holds two unrelated things: the trust setup, which everything else needs now,
+   and the kill switch, which D-072 applies before the game goes public and not during the
+   pilot. So the first apply is **targeted** at the trust resources only. Targeting rather
+   than a `count` switch, deliberately: a `count` would mean editing `kill_switch.tf`, and
+   only George merges a change to that file (D-070). `-target` leaves it untouched.
+
+   ```
+   cd ~/fetchpep/infra/bootstrap
+   terraform init                    # creates the workspace; then set Execution mode Local
+   terraform plan -out=trust.plan \
+     -target=google_project_service.federation \
+     -target=google_iam_workload_identity_pool.hcp_terraform \
+     -target=google_iam_workload_identity_pool_provider.hcp_terraform \
+     -target=google_project_iam_custom_role.tf_plan \
+     -target=google_project_iam_custom_role.tf_apply \
+     -target=google_service_account.tfc_plan \
+     -target=google_service_account.tfc_apply \
+     -target=google_project_iam_member.tfc_plan \
+     -target=google_project_iam_member.tfc_apply \
+     -target=google_service_account_iam_member.tfc_plan_impersonation \
+     -target=google_service_account_iam_member.tfc_apply_impersonation \
+     -target=google_service_account.nakama \
+     -target=google_project_iam_member.nakama \
+     -target=google_service_account_iam_member.runner_uses_nakama \
+     -target=google_service_account_iam_member.runners_view_nakama \
+     -target=google_pubsub_topic.secret_rotation \
+     -target=google_pubsub_topic_iam_member.secret_manager_publisher
+   ```
+
+   **Read the plan before applying it.** Two things to look for, in this order:
+
+   ```
+   verify: the plan creates ZERO kill-switch resources — no google_billing_budget,
+           no google_cloudfunctions2_function, no google_storage_bucket, no
+           google_artifact_registry_repository, no google_project_iam_custom_role
+           .detach_billing, and no google_service_account named kill_* (D-099, D-072)
+           grep -cE 'google_billing_budget|cloudfunctions2|storage_bucket|artifact_registry|kill_' <the plan output>   →   0
+   ```
+
+   Then `terraform apply trust.plan`.
+
+   The plan will **not** prompt for `billing_account`, `warn_amount` or `kill_amount`:
+   nothing targeted refers to them. If it does prompt, a kill-switch resource is in the plan
+   and the target list is wrong — stop and say so, do not type a value to get past it.
+
+   The remaining resources stay in the configuration and out of the state, and `terraform
+   plan` will keep showing them as "to add" until the launch step applies them. That is the
+   intended reading of D-072, not drift.
+
+2. **Set the workspace variables on `fetchpep-dev`.** The workspace does not exist yet, so
+   create it first:
+
+   ```
+   cd ~/fetchpep/infra/dev
+   terraform init                    # creates the workspace fetchpep-dev
+   ```
+
+   Then, before any plan, in the HCP Terraform UI:
+
+   - Settings → General → **Execution mode: Remote**, **Apply method: Manual apply**,
+     **Working Directory: `infra/dev`** (section 20 — the last one is load-bearing).
+   - Variables → add four, all of category **Environment variable**, not Terraform variable:
+
+     ```
+     TFC_GCP_PROVIDER_AUTH                 true
+     TFC_GCP_WORKLOAD_PROVIDER_NAME        <from the bootstrap output>
+     TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL    <from the bootstrap output>
+     TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL   <from the bootstrap output>
+     ```
+
+     The three values come from `terraform output tfc_workspace_variables` in
+     `infra/bootstrap`. None is a secret.
+
+   - Variables → add one **Terraform variable**, marked **HCL**:
+
+     ```
+     tunnel_users   ["user:<the address that will reach the VM>"]
+     ```
+
+     Empty by default, and while it is empty nobody can open a tunnel to the VM —
+     including whoever just applied. It is a workspace variable rather than `-var` so that
+     it survives the next apply.
+
+   ```
+   verify: the workspace page reads Remote · Manual apply · infra/dev
+   ```
+
+3. **Create the secret containers, before the VM exists.** The containers must exist before
+   there are versions to put in them, and the VM refuses to start without a version of every
    secret.
-3. **Get the secret containers made before the VM boots.** The containers must exist before
-   there are versions to put in them, and the VM refuses to start without a version of
-   every secret. Two ways, and which one is available depends on the workspace:
 
-   - `terraform apply -target=google_secret_manager_secret.nakama` — but [likely] HCP
-     Terraform refuses a CLI-driven apply on a workspace connected to VCS, and `fetchpep-dev`
-     is Remote.
-   - **The fallback, which always works:** apply the whole stack and let the first boot
-     fail. The startup script exits with the names of the secrets it could not read, nothing
-     is half-configured, and step 4 then the reboot in step 4a finish the job.
+   ```
+   terraform apply -target=google_secret_manager_secret.nakama
+   ```
+
+   [likely] This works because `fetchpep-dev` is CLI-driven: O-31 is not done, so no VCS
+   provider is connected, and a CLI-driven workspace accepts `-target` from the command
+   line. **If HCP Terraform refuses it** — which it does on a VCS-connected workspace — take
+   the fallback instead: apply the whole stack at step 5, let the first boot fail (the
+   startup script names each secret it could not read), then do step 4 and step 4a.
+
 4. **Create a version of each secret.** Values never pass through Terraform, a file, or an
    agent (D-089):
 
@@ -413,34 +537,35 @@ Each step needs the one before it. Steps 1 and 3 are George's.
 
    `tr '+/' '-_'` is required, not cosmetic: every value must match `^[A-Za-z0-9_-]+$`. The
    database address is a URL where a raw `@` or `:` changes which host is dialled, and
-   `render-config.sh` substitutes with `sed`. It refuses to render anything else.
+   `render-config.sh` substitutes with `sed`. The startup script refuses anything else, by
+   name, before it writes a thing.
 
    ```
    verify: gcloud secrets versions list <name> --project fetchpep-dev   →   one ENABLED
    ```
-4a. **Reboot, if step 3 took the fallback.** The first boot failed with no secrets; this is
-   the boot that finds them. Not needed if the targeted apply worked, because the VM has not
-   been created yet.
+
+4a. **Only if step 3 took the fallback: restart the VM**, so the boot that failed for want
+   of secrets runs again now they exist.
 
    ```
-   gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev \
-     --tunnel-through-iap --command 'sudo reboot'
+   gcloud compute instances stop fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev
+   gcloud compute instances start fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev
    ```
 
-5. **Give whoever needs the VM a tunnel.** `tunnel_users` is empty by default, so until this
-   is set nobody can reach it — including the person who just applied.
+   Stop and start, not `ssh … sudo reboot`: at this point `tunnel_users` may still be empty,
+   so there is no way in to type a command. It is also a clean shutdown, unlike
+   `instances reset`, which is a power cut and puts PostgreSQL through crash recovery.
 
-   `-var` on the command line has the same problem as `-target` in step 3: [likely] HCP
-   Terraform refuses a CLI-driven apply on a VCS-connected workspace, and it would not
-   persist. **Set it as a Terraform variable on the workspace instead** — Workspace →
-   Variables → `tunnel_users`, marked **HCL**, with the value:
+5. **Apply the rest.**
 
-   ```hcl
-   ["user:<the address>"]
+   ```
+   terraform apply
    ```
 
-   Then run the apply from the HCP Terraform UI. A workspace variable also survives the next
-   apply, which a `-var` would not.
+   from `~/fetchpep/infra/dev`, which uploads the repository root because of the working
+   directory setting. The plan is created remotely and waits for a click, because the
+   workspace is Manual apply.
+
 6. **Watch the first boot.** The startup script is the whole of the install:
 
    ```
@@ -451,12 +576,21 @@ Each step needs the one before it. Steps 1 and 3 are George's.
    ```
    verify: the last line reads   fetchpep-startup: up
    ```
+
+   Anything else names its own cause: `data disk not attached`, `<NAME>: no readable
+   version`, `<NAME> has a character outside [A-Za-z0-9_-]`, or
+   `…/bin/docker-compose will not run — is …/bin still noexec?`.
+
 7. **Reach it.** Both ports are on the VM's loopback, so a forward is the only way in:
 
    ```
    gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a \
-     --project fetchpep-dev --tunnel-through-iap -- -L 7350:localhost:7350
+     --project fetchpep-dev --tunnel-through-iap \
+     -- -L 7351:localhost:7351 -L 7350:localhost:7350
    ```
+
+   Then `http://localhost:7351` for the console, and 7350 for the doors. Whoever runs it has
+   to be in `tunnel_users` (step 2).
 
 ## 22. Rotating a secret
 

@@ -18,11 +18,13 @@ version" does not work — this does, because it is told rather than remembered.
 | Unity Editor | `TBD` | `ProjectSettings/ProjectVersion.txt` | Must be 6.0 LTS or later — `com.unity.pipeline` does not exist below it |
 | `com.unity.pipeline` | `TBD` | `Packages/manifest.json` | **`0.x-exp`.** Surface changes monthly. Expect breakage on upgrade |
 | Unity CLI | `TBD` | not pinnable | Installed from the **beta** channel |
-| Node | `TBD` | `.nvmrc` | |
+| Node | `24.21.0` | `services/nakama/.nvmrc` · `node-version-file` in `.github/workflows/checks.yml` | What the Cloud Shell seat runs, so the bundle CI compares against is built on the same host as the one the developer builds on. Exact, not `24`: the D-097 check is a byte-for-byte comparison |
 | pnpm | `TBD` | `packageManager` in `package.json` | |
 | Terraform | `1.16.4` | `infra/.terraform-version` · `required_version` in each stack | Not installed on the Cloud Shell seat: the binary is fetched into the session's scratch folder, checksum-checked against HashiCorp's `SHA256SUMS`, and run from there (D-085). O-34 is the same gap on the retired PC seat |
 | Terraform `hashicorp/google` | `8.4.0` | `versions.tf` · `.terraform.lock.hcl` | Locked for `linux_amd64` (Cloud Shell) and `windows_amd64` |
 | Terraform `hashicorp/archive` | `2.8.1` | `versions.tf` · `.terraform.lock.hcl` | Zips the kill-switch source |
+| `actions/checkout` | `v7.0.1` = `3d3c42e5aac5` | `.github/workflows/checks.yml`, by SHA | [certain] A tag is movable, so the SHA is the pin and the tag is the comment |
+| `actions/setup-node` | `v7.0.0` = `820762786026` | `.github/workflows/checks.yml`, by SHA | Same |
 | Cloud Run functions runtime | `nodejs24` | `infra/bootstrap/kill_switch.tf` | The kill switch |
 | `@google-cloud/functions-framework` | `5.0.5` | `infra/bootstrap/function/package.json` · `package-lock.json` | The kill switch's only declared dependency. Pinned by D-073 under R-SEC-04; an upgrade is its own change, and George's after merge (D-070) |
 | `@electric-sql/pglite` | `0.3.16` | `checks/skeleton.test.mjs` header · `checks/README.md` | Test-only, and the one thing here **not** installed in the repo: D-084 puts a test-only package in the developer's scratch folder, so there is no manifest to pin it in. The version is pinned by the `npm install --save-exact` line both files carry. Embeds PostgreSQL 17.5; the VM runs 16 (D-063) |

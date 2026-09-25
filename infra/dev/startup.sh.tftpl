@@ -176,15 +176,28 @@ check_charset() {
   return 0
 }
 
+# `.env.tmp` holds the secrets read so far, so it never outlives a failure.
+give_up() {
+  rm -f .env.tmp
+  exit 1
+}
+
 umask 077
 : > .env.tmp
 for s in $SECRET_NAMES; do
   # invite-email-hmac-key has no consumer in the container yet (O-77); it is read here so
   # that a missing version is caught at boot rather than on the day something needs it.
   name=$(env_name "$s")
-  value=$(secret "$s")
+  # `|| { … }`, not a bare assignment. `secret` is curl, and `set -e` would otherwise take
+  # the script down on a missing version with curl's exit code and **no log line at all** —
+  # the one path where the operator most needs to be told which secret, because it is the
+  # first boot after a fresh apply and the fallback in the runbook depends on the names.
+  if ! value=$(secret "$s"); then
+    log "$name: no readable version. Has one been added? (gcloud secrets versions add $s)"
+    give_up
+  fi
   # The name is logged on failure, never the value.
-  check_charset "$name" "$value" || exit 1
+  check_charset "$name" "$value" || give_up
   printf '%s=%s\n' "$name" "$value" >> .env.tmp
 done
 
@@ -193,8 +206,7 @@ done
 if grep -qE '^[A-Z_]+=$' .env.tmp; then
   log "a secret came back empty — is there a version of each one? Names, not values:"
   grep -E '^[A-Z_]+=$' .env.tmp | cut -d= -f1
-  rm -f .env.tmp
-  exit 1
+  give_up
 fi
 
 printf 'PGDATA_PATH=%s\n' "$PGDATA_DIR/data" >> .env.tmp

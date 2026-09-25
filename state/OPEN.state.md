@@ -163,16 +163,16 @@ rather than a formality, and so a failure is recognised instead of debugged from
    repository uploaded, because `vm_nakama.tf` reads `../../services/nakama/...`. Written up
    in `ops/RUNBOOK.ops.md` Part 5, step 20.
 
-**O-82 · `CLAUDE.md` section 9 counts the checks, and the count is now wrong.**
-It reads "Six checks run in CI on every push and block the merge; three more run only in the
-pre-push hook." Since D-097 and O-42 there are **ten** checks: all ten run in CI, and nine of
-them also run in the hook — not `authority`, which needs a base ref, and not `bundle`, which
-needs `npm ci`. `CLAUDE.md` is `george-only`, so this is proposed, not applied. **Proposed
-wording**, which fits the same two lines: "Ten checks run in CI on every push and block the
-merge; nine of them also run in the pre-push hook." The deeper point is that a number in the
-router goes stale every time a check is added, and section 9 already routes to
-`checks/README.md`, which has the table. George may prefer to drop the count entirely and
-let the README carry it — that is the smaller thing to maintain, and it is his file.
+**O-82 · resolved 25 Sep by D-100.** `CLAUDE.md` section 9 counted the checks — "Six checks
+run in CI … three more run only in the pre-push hook" — and D-097 plus O-42 made every number
+in that sentence wrong. George chose to drop the count rather than correct it, so section 9
+now says "Every check in `checks/` runs in CI on every push and blocks the merge; most also
+run in the pre-push hook" and routes to `checks/README.md`, which carries the table. The
+router cannot go stale when a check is added. **The proposal in this item said "nine of them
+also run in the hook", and that was wrong too:** the hook runs **eight**
+(`.githooks/pre-push.bash`), not nine — `authority` needs a base ref and `bundle` needs
+`npm ci`. Caught by the PR #25 review, and it is the argument for D-100 rather than against
+it: a count restated away from the list it counts is a count that drifts.
 
 **O-81 · `.claude/settings.json` has no tier in `CLAUDE.md` section 6.**
 It is the file that decides whether the write guard runs at all, and section 6's table says

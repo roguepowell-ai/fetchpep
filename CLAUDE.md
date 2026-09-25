@@ -145,6 +145,6 @@ A rule you have had to repeat twice belongs one tier up.
 
 ## 9. CI
 
-Six checks run in CI on every push and block the merge; three more run only in the pre-push
-hook. `checks/README.md` lists them and what each fails on. The orphan check is the one that
+Every check in `checks/` runs in CI on every push and blocks the merge; most also run in the
+pre-push hook. `checks/README.md` lists them and what each fails on. The orphan check is the one that
 matters: a contract file nothing routes to is unreachable after a compaction, not merely unread.

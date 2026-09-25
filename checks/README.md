@@ -10,8 +10,9 @@ The **caught** tier. Blocked things live in `hooks/`; explained things live in `
 A check blocks the merge when it runs in CI, and refuses the push when it runs in the
 pre-push hook. It reads the contract as **data**, never as instructions.
 
-**All ten run in CI** (`.github/workflows/checks.yml`). Nine of them also run in
-`.githooks/pre-push`. `secrets`, `versions` and `naming` used to run in the hook only, which
+**All ten run in CI** (`.github/workflows/checks.yml`). **Eight** of them also run in
+`.githooks/pre-push` — not `authority`, which needs a base ref to compare against, and not
+`bundle`, which needs `npm ci`. `secrets`, `versions` and `naming` used to run in the hook only, which
 meant they gated nothing that mattered — `--no-verify` skips the hook and a fresh clone does
 not have it until `core.hooksPath` is set. That was O-42, and it is closed. `bundle` is the
 other way round: CI only, because it needs the npm registry and the hook is meant to fail in
@@ -50,8 +51,9 @@ and there is no image registry of ours, so `infra/dev/vm_nakama.tf` reads the co
 bundle with `file()` and delivers it in instance metadata. The committed file is therefore
 the thing that runs. Editing `src/` without rebuilding ships the old module; editing the
 bundle by hand ships something no source describes. Neither leaves a trace, which is what
-makes it a check rather than a rule. It rebuilds into a temporary directory and compares, so
-running it can neither fix nor dirty what it is checking.
+makes it a check rather than a rule. It copies the sources into a temporary directory, installs and
+compiles **there**, and compares, so running it touches nothing in the working tree — not
+even `node_modules`, which an in-place `npm ci` would have replaced.
 
 ## The two that matter most
 
@@ -64,9 +66,9 @@ only remedy. This check is the backstop; `hooks/guard-write.mjs` is the control.
 
 ## Where else these run
 
-`.githooks/pre-push` runs nine of the ten before a push leaves the machine, and refuses it
-on any failure. Not `authority`, which needs a base ref to compare against, and not
-`bundle`, which needs `npm ci`. It is a POSIX `sh` shim that finds bash (on `PATH`, then
+`.githooks/pre-push` runs eight of the ten before a push leaves the machine, and refuses it
+on any failure — the list in `.githooks/pre-push.bash`, which is the thing to count, not this
+sentence. It is a POSIX `sh` shim that finds bash (on `PATH`, then
 `C:\Program Files\Git\bin\bash.exe`, then `C:\Program Files\Git\usr\bin\bash.exe`) and runs
 `.githooks/pre-push.bash`, because GitHub Desktop's bundled git has no bash (O-71). If no
 bash is found, the push is refused. Enable once per clone:

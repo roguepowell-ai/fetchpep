@@ -7,8 +7,10 @@
 # this check, editing `src/` and forgetting to rebuild ships the *old* module, and editing
 # `build/index.js` by hand ships something no source describes. Neither leaves a trace.
 #
-# It rebuilds into a temporary directory and compares. It never writes to the working tree,
-# so running it can neither fix nor dirty the thing it is checking.
+# **It builds in a copy.** The sources go to a temporary directory and `npm ci` and `tsc`
+# run there, so the check touches nothing in the working tree — not the bundle it is
+# judging, and not `node_modules`, which an in-place `npm ci` would have deleted and
+# rebuilt under whoever ran it.
 #
 # CI only. It needs the npm registry, and the pre-push hook is meant to fail in seconds.
 set -euo pipefail
@@ -23,19 +25,33 @@ command -v npm >/dev/null 2>&1 || { echo "FAIL bundle: npm is not on PATH."; exi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+cp -R "$SERVICE/src" "$tmp/src"
+cp "$SERVICE/tsconfig.json" "$SERVICE/package.json" "$SERVICE/package-lock.json" "$tmp/"
+
 # `npm ci`, not `npm install`: it installs exactly what package-lock.json says and fails if
 # the lock file disagrees with package.json. A check that quietly resolved a different
 # TypeScript would be checking the wrong compiler (ops/VERSIONS.ops.md rule 2).
-( cd "$SERVICE" && npm ci --silent --no-audit --no-fund ) >/dev/null
+#
+# `--ignore-scripts`: a check should not run a dependency's install hooks. Output is kept
+# and printed only on failure, because an npm error that goes to /dev/null is a check that
+# fails with no reason given.
+if ! npm ci --prefix "$tmp" --ignore-scripts --no-audit --no-fund >"$tmp/npm.log" 2>&1; then
+  echo "FAIL bundle: 'npm ci' failed in $SERVICE. Is package-lock.json in step with package.json?"
+  tail -15 "$tmp/npm.log" | sed 's/^/      /'
+  exit 1
+fi
 
-# --outFile on the command line, so the committed bundle is never the target.
-( cd "$SERVICE" && ./node_modules/.bin/tsc -p tsconfig.json --outFile "$tmp/index.js" )
+if ! "$tmp/node_modules/.bin/tsc" -p "$tmp/tsconfig.json" --outFile "$tmp/rebuilt.js" >"$tmp/tsc.log" 2>&1; then
+  echo "FAIL bundle: $SERVICE/src does not compile."
+  tail -15 "$tmp/tsc.log" | sed 's/^/      /'
+  exit 1
+fi
 
-if ! cmp -s "$BUNDLE" "$tmp/index.js"; then
+if ! cmp -s "$BUNDLE" "$tmp/rebuilt.js"; then
   echo "FAIL bundle: $BUNDLE is not what $SERVICE/src compiles to (D-097)."
-  echo "      committed: $(sha256sum < "$BUNDLE" | cut -c1-16)   rebuilt: $(sha256sum < "$tmp/index.js" | cut -c1-16)"
+  echo "      committed: $(sha256sum < "$BUNDLE" | cut -c1-16)   rebuilt: $(sha256sum < "$tmp/rebuilt.js" | cut -c1-16)"
   echo "      First difference:"
-  diff <(cat "$BUNDLE") <(cat "$tmp/index.js") | head -8 | sed 's/^/      /'
+  diff "$BUNDLE" "$tmp/rebuilt.js" | head -8 | sed 's/^/      /'
   echo "      Fix it by rebuilding, never by editing the bundle:"
   echo "        cd $SERVICE && npm ci && npm run build"
   exit 1
