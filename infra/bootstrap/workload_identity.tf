@@ -85,11 +85,22 @@ resource "google_iam_workload_identity_pool_provider" "hcp_terraform" {
 # exactly what D-089 and the design of `infra/dev/secrets.tf` are for — Terraform creates
 # containers and never touches a value — and a role that contradicts the design is the
 # wrong role, however convenient.
+#
+# **What this does not claim.** The apply account still reaches a value *indirectly*, two
+# ways, and both are inherent to being the thing that builds the stack:
+#   - `secretmanager.secrets.setIamPolicy` can grant `secretAccessor` to anything, itself
+#     included, and then read;
+#   - `compute.instanceAdmin.v1` can set a VM's startup script, and the VM may read the
+#     secrets it is entitled to.
+# So this role is a guard against a careless read, not against a determined one. What it
+# does buy is that a value cannot appear in a plan, in state, or in a log by accident, which
+# is the failure R-SEC-01 is about. Closing the indirect paths means an apply account that
+# cannot set IAM or create instances, which is an apply account that cannot apply.
 
 resource "google_project_iam_custom_role" "tf_apply" {
   role_id     = "fetchpepDevTfApply"
   title       = "fetchpep-dev Terraform apply"
-  description = "Secret containers and IAP tunnel policy. Deliberately excludes every permission that can read or write a secret value."
+  description = "Secret containers and IAP tunnel policy. Excludes every permission that reads or writes a secret value directly; see the comment above for what it still reaches indirectly."
 
   permissions = [
     "secretmanager.secrets.create",
@@ -109,6 +120,8 @@ resource "google_project_iam_custom_role" "tf_apply" {
     "serviceusage.services.enable",
     "serviceusage.services.get",
     "serviceusage.services.list",
+    # Enabling a service returns a long-running operation, and the provider polls it.
+    "serviceusage.operations.get",
     "resourcemanager.projects.get",
   ]
 }
@@ -210,7 +223,14 @@ resource "google_pubsub_topic" "secret_rotation" {
     allowed_persistence_regions = [local.location]
   }
 
-  depends_on = [google_project_service.federation]
+  # Both API sets: `federation` for Secret Manager, and the kill switch's `apis` for
+  # `pubsub.googleapis.com`. This adds a reference to that resource and does not edit
+  # `kill_switch.tf` (D-070). On the existing project Pub/Sub is already on, so today it
+  # changes nothing; on a fresh project it is the difference between working and a race.
+  depends_on = [
+    google_project_service.federation,
+    google_project_service.apis,
+  ]
 }
 
 # [certain] Secret Manager publishes rotation notices as its own service agent, and refuses

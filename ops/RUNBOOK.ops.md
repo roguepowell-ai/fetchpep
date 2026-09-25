@@ -361,9 +361,13 @@ Each step needs the one before it. Steps 1 and 3 are George's.
    command, and it is safe to repeat:
 
    ```
+   gcloud services enable secretmanager.googleapis.com --project fetchpep-dev
    gcloud beta services identity create --service=secretmanager.googleapis.com \
      --project fetchpep-dev
    ```
+
+   The `enable` comes first because at this point nothing has enabled Secret Manager: the
+   bootstrap stack does, but this step runs before it. Both commands are safe to repeat.
 
    ```
    verify: it prints   service-424117215837@gcp-sa-secretmanager.iam.gserviceaccount.com
@@ -392,8 +396,8 @@ Each step needs the one before it. Steps 1 and 3 are George's.
      Terraform refuses a CLI-driven apply on a workspace connected to VCS, and `fetchpep-dev`
      is Remote.
    - **The fallback, which always works:** apply the whole stack and let the first boot
-     fail. The startup script exits with `a secret came back empty` and the names, nothing
-     is half-configured, and step 4 then step 6's reboot finish the job.
+     fail. The startup script exits with the names of the secrets it could not read, nothing
+     is half-configured, and step 4 then the reboot in step 4a finish the job.
 4. **Create a version of each secret.** Values never pass through Terraform, a file, or an
    agent (D-089):
 
@@ -414,11 +418,29 @@ Each step needs the one before it. Steps 1 and 3 are George's.
    ```
    verify: gcloud secrets versions list <name> --project fetchpep-dev   →   one ENABLED
    ```
-5. **Apply the rest**, with `tunnel_users` naming whoever needs to reach the VM:
+4a. **Reboot, if step 3 took the fallback.** The first boot failed with no secrets; this is
+   the boot that finds them. Not needed if the targeted apply worked, because the VM has not
+   been created yet.
 
    ```
-   terraform apply -var 'tunnel_users=["user:<the address>"]'
+   gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev \
+     --tunnel-through-iap --command 'sudo reboot'
    ```
+
+5. **Give whoever needs the VM a tunnel.** `tunnel_users` is empty by default, so until this
+   is set nobody can reach it — including the person who just applied.
+
+   `-var` on the command line has the same problem as `-target` in step 3: [likely] HCP
+   Terraform refuses a CLI-driven apply on a VCS-connected workspace, and it would not
+   persist. **Set it as a Terraform variable on the workspace instead** — Workspace →
+   Variables → `tunnel_users`, marked **HCL**, with the value:
+
+   ```hcl
+   ["user:<the address>"]
+   ```
+
+   Then run the apply from the HCP Terraform UI. A workspace variable also survives the next
+   apply, which a `-var` would not.
 6. **Watch the first boot.** The startup script is the whole of the install:
 
    ```
@@ -459,7 +481,23 @@ A clean shutdown costs a few seconds and skips that. `stop` then `start` is equa
 The reboot re-runs the startup script, which stops the containers, reads `latest`, rewrites
 `.env` and `nakama.runtime.yml`, and brings everything up **force-recreated** — which is
 what makes a rotation take effect rather than leaving the old value in a running container.
-Then disable the old version.
+
+Then deal with the old version. **Disable it, and destroy it a week later** —
+
+```
+gcloud secrets versions disable <name> <n> --project fetchpep-dev     # now
+gcloud secrets versions destroy <name> <n> --project fetchpep-dev     # a week later
+```
+
+— for two reasons. Disabling is reversible, so it is the right first move if the new value
+turns out to be wrong; a week is long enough to find that out. And [certain] a disabled
+version still bills at $0.06 a month, so leaving every old version disabled costs about
+$0.12 a month more for every month of rotations — roughly $1.50 a month after a year, for
+values nobody can use. Destroying is irreversible, which is the point of the week.
+
+The exception is `invite-email-hmac-key`: keep old versions **enabled** until no open invite
+refers to them (`directory.fold_invite.hmac_key_version`), then disable and destroy on the
+same delay.
 
 What each one costs, which is the part worth knowing before starting:
 

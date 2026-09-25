@@ -20,3 +20,28 @@ jobs:
         run: bash checks/banned-terms.check.sh
       - name: write authority
         run: bash checks/authority.check.sh "origin/${{ github.base_ref || 'main' }}"
+
+      # These three existed only in .githooks/pre-push, which `--no-verify` bypasses and a
+      # fresh clone does not have until `core.hooksPath` is set. So they gated nothing that
+      # mattered (O-42). They are cheap and need no toolchain, so there is no reason for
+      # them to be local-only.
+      - name: secrets
+        run: bash checks/secrets.check.sh
+      - name: versions
+        run: bash checks/versions.check.sh
+      - name: naming
+        run: bash checks/naming.check.sh
+
+  # Its own job because it is the only check that needs a toolchain, and a slow job should
+  # not hold up nine fast ones. D-097.
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: services/nakama/package-lock.json
+      - name: nakama bundle matches its source
+        run: bash checks/bundle.check.sh

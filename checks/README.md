@@ -8,9 +8,14 @@ The **caught** tier. Blocked things live in `hooks/`; explained things live in `
 `spec/`. See `rules/WORKING-METHOD.rule.md` for why the tiers exist.
 
 A check blocks the merge when it runs in CI, and refuses the push when it runs in the
-pre-push hook. It reads the contract as **data**, never as instructions. Six run in CI
-(`.github/workflows/checks.yml`); three run only in the hook until the workflow is
-extended (O-42).
+pre-push hook. It reads the contract as **data**, never as instructions.
+
+**All ten run in CI** (`.github/workflows/checks.yml`). Nine of them also run in
+`.githooks/pre-push`. `secrets`, `versions` and `naming` used to run in the hook only, which
+meant they gated nothing that mattered — `--no-verify` skips the hook and a fresh clone does
+not have it until `core.hooksPath` is set. That was O-42, and it is closed. `bundle` is the
+other way round: CI only, because it needs the npm registry and the hook is meant to fail in
+seconds.
 
 ## The checks
 
@@ -22,11 +27,12 @@ extended (O-42).
 | `frontmatter.check.sh` | A contract file has missing or invalid `authority:` | CI, hook |
 | `banned-terms.check.sh` | A banned term appears outside the files that define it | CI, hook |
 | `authority.check.sh` | A Claude-authored commit touches a `george-only` file | CI |
-| `secrets.check.sh` | Anything that looks like a credential is committed | hook only |
-| `versions.check.sh` | `ops/VERSIONS.ops.md` disagrees with what is actually pinned | hook only |
-| `naming.check.sh` | A contract file is named outside the convention | hook only |
+| `secrets.check.sh` | Anything that looks like a credential is committed | CI, hook |
+| `versions.check.sh` | `ops/VERSIONS.ops.md` disagrees with what is actually pinned | CI, hook |
+| `naming.check.sh` | A contract file is named outside the convention | CI, hook |
+| `bundle.check.sh` | `services/nakama/build/index.js` is not what `src/` compiles to (D-097) | CI only |
 
-## Not one of the nine
+## Not one of the ten
 
 `skeleton.test.mjs` is a **spec test**, not a gate. It reads Migration 0001 and 0002 out of
 `spec/DATA-MODEL.spec.md` and applies them to an embedded PostgreSQL, so the spec's own
@@ -39,6 +45,14 @@ cd <scratch folder> && npm install --save-exact @electric-sql/pglite@0.3.16
 cd <repo> && PGLITE_DIR=<scratch folder> node checks/skeleton.test.mjs spec/DATA-MODEL.spec.md
 ```
 
+**`bundle.check.sh`** — D-097. Nakama loads one JavaScript file, the VM has no build step
+and there is no image registry of ours, so `infra/dev/vm_nakama.tf` reads the committed
+bundle with `file()` and delivers it in instance metadata. The committed file is therefore
+the thing that runs. Editing `src/` without rebuilding ships the old module; editing the
+bundle by hand ships something no source describes. Neither leaves a trace, which is what
+makes it a check rather than a rule. It rebuilds into a temporary directory and compares, so
+running it can neither fix nor dirty what it is checking.
+
 ## The two that matter most
 
 **`router-orphans.check.sh`** — a contract file nothing routes to is not merely unread.
@@ -50,8 +64,9 @@ only remedy. This check is the backstop; `hooks/guard-write.mjs` is the control.
 
 ## Where else these run
 
-`.githooks/pre-push` runs the same eight checks before a push leaves the machine, and
-refuses it on any failure. It is a POSIX `sh` shim that finds bash (on `PATH`, then
+`.githooks/pre-push` runs nine of the ten before a push leaves the machine, and refuses it
+on any failure. Not `authority`, which needs a base ref to compare against, and not
+`bundle`, which needs `npm ci`. It is a POSIX `sh` shim that finds bash (on `PATH`, then
 `C:\Program Files\Git\bin\bash.exe`, then `C:\Program Files\Git\usr\bin\bash.exe`) and runs
 `.githooks/pre-push.bash`, because GitHub Desktop's bundled git has no bash (O-71). If no
 bash is found, the push is refused. Enable once per clone:

@@ -101,6 +101,11 @@ D-031 pilot ships free, D-032 revenue is web-side via Stripe only.
 | D-090 | **`invite-email-hmac-key` gets its container now, in `fetchpep-dev`, like the others:** user-managed `europe-west2` replication, a rotation period, and `secretAccessor` for the VM account only. No version is created by Terraform (D-089). How the website gets the same key stays open until we decide where the website runs. Answers O-77 | George, 25 Sep | **Decided.** Built in PR #20, where `secrets.tf` was being reworked for the rotation blocker |
 | D-091 | **`directory.door_log` keeps the unique index on `idempotency_key`, and `'duplicate'` comes out of the outcome check constraint.** `duplicate` is still returned to the caller and is never stored. Answers O-76 | George, 25 Sep | **Decided.** Needs a new numbered migration and the matching change to `spec/DATA-MODEL.spec.md`, in its own PR after #20 merges — one concern per change |
 | D-092 | **The running cost of `infra/dev` is approved at about $24.5–25 a month (about £18–19), list prices, `europe-west2`.** `ops/COSTS.ops.md` is corrected to this figure, which is now the cost of record | George, 25 Sep — "cost is fine" | **Decided.** The first PR #20 review's table is the breakdown George approved. **Proposed, not decided:** separating the database onto its own disk, added after that review, takes the stack to about **$25.8–26.2 (£19.5–20)** — about $1 more, which is inside "a few dollars", so the PM does not take it back to George. An earlier version of this row said $27.5–28; that was arithmetic, not a decision, and it was wrong |
+| D-097 | **CI rebuilds `services/nakama/build/index.js` from `src/` and fails on any difference.** The committed server bundle can't drift from its source, or be hand-edited, and still merge. Promotes the rule to the Caught tier (WORKING-METHOD §7) | George, 25 Sep — chose "Add the CI check" | Decided |
+
+**D-093 to D-096** are not assigned. D-097 was given its number by George in the comment
+that decided it, on PR #20; the four below it were never used. Do not fill the gap — an ID
+that means two things is worse than a gap.
 
 **Numbering.** D-040 has no record in the repo or the Project; do not reuse it. D-039
 exists only in the Project and is copied above. An earlier version of this note said D-039
