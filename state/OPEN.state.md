@@ -59,6 +59,18 @@ have the failure rate prose has. They become enforceable when there is code to c
 it. `rules/` is `george-only`, so Claude proposed and George applies. Text in the session
 log for 24 Sep.
 
+**O-73 · The write guard covers the Edit and Write tools, not Bash.**
+[certain] `hooks/guard-write.mjs` line 20 reads
+`const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])`, and every
+later check returns early for any other tool. A file changed with `sed`, a heredoc or any
+other shell command through the Bash tool is not seen by the guard, so the blocked tier
+(`CLAUDE.md` section 8) does not apply to it — banned terms, `george-only` files and Unity
+YAML are then caught only by CI and the pre-push hook. Found on PR #17, where the developer
+edited files with Bash. **Until it is fixed, file changes go through the Edit and Write
+tools only.** A fix means matching on Bash commands as well, which is a decision: a guard
+that parses shell has its own failure mode, and refusing every write-shaped Bash command
+would stop ordinary work.
+
 ## Blocking the world map
 
 - **O-2 · Q43 — resolved 24 Sep by D-051.** The game has no regions. The shared instance is
