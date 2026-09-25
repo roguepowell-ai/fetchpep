@@ -18,22 +18,30 @@
 # by the one apply that already runs with George's own rights, and `infra/dev` only reads it.
 
 # ------------------------------------------------------------------------ APIs
-# The two the federation itself needs. Everything in the kill switch's list is enabled by
-# `google_project_service.apis` in kill_switch.tf; a second resource for the same service
-# would fight it, so these are only the ones that file does not already name.
-
-# **`pubsub.googleapis.com` is deliberately declared here as well as in `kill_switch.tf`.**
-# The rotation topic below needs Pub/Sub on, and D-099 keeps every kill-switch resource out
-# of the first apply — `google_project_service.apis` is one of them, declared in
-# `kill_switch.tf`, so depending on it would pull that file's resource into a targeted apply
-# that is supposed to exclude it. Two `google_project_service` resources naming one service
-# is untidy, and it is the right trade: enabling a service is idempotent, both carry
-# `disable_on_destroy = false` so neither can turn it off, and the alternative is either
-# editing `kill_switch.tf` (D-070) or breaking D-099.
+# **Every API this stack needs is declared here, including four that `kill_switch.tf` also
+# names.**
+#
+# This file used to declare only what that one did not, and lean on its
+# `google_project_service.apis` for the rest. D-099 ended that: the first apply is targeted
+# at the trust resources and excludes every `kill_switch.tf` resource, `apis` among them. So
+# on a fresh project nothing would enable `iam` or `cloudresourcemanager`, and the first
+# service account, custom role or IAM binding would fail with SERVICE_DISABLED. What this
+# stack needs, this stack owns.
+#
+# Two Terraform resources naming one service is untidy, and it is the least bad of three:
+# the alternatives were editing `kill_switch.tf` (D-070) or breaking D-099. It is safe
+# because enabling a service is idempotent and each resource has its own address in state,
+# so they do not fight — **and that safety rests entirely on `disable_on_destroy = false` on
+# both sides.** Setting it `true` in either file would let a destroy switch off a service
+# the kill switch needs. Do not.
 resource "google_project_service" "federation" {
   for_each = toset([
+    # Also named in kill_switch.tf. See the note above.
+    "cloudresourcemanager.googleapis.com", # every google_project_iam_member call
+    "iam.googleapis.com",                  # service accounts, custom roles, the WIF pool
+    "pubsub.googleapis.com",               # the rotation topic
+    # This stack's alone.
     "iamcredentials.googleapis.com",
-    "pubsub.googleapis.com",
     "secretmanager.googleapis.com",
     "sts.googleapis.com",
   ])
@@ -133,6 +141,10 @@ resource "google_project_iam_custom_role" "tf_apply" {
     "serviceusage.operations.get",
     "resourcemanager.projects.get",
   ]
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 resource "google_project_iam_custom_role" "tf_plan" {
@@ -149,6 +161,10 @@ resource "google_project_iam_custom_role" "tf_plan" {
     "serviceusage.services.list",
     "resourcemanager.projects.get",
   ]
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 # --------------------------------------------------------------- the runners
@@ -160,12 +176,20 @@ resource "google_service_account" "tfc_plan" {
   account_id   = "fetchpep-dev-tfc-plan"
   display_name = "HCP Terraform — plan phase, fetchpep-dev"
   description  = "Read-only. Impersonated by plan runs through workload identity (D-064). Holds no key."
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 resource "google_service_account" "tfc_apply" {
   account_id   = "fetchpep-dev-tfc-apply"
   display_name = "HCP Terraform — apply phase, fetchpep-dev"
   description  = "Creates what infra/dev declares. Impersonated by apply runs only. Holds no key."
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 # A map with **literal keys**, not a set. `for_each` keys have to be known at plan time, and
@@ -262,6 +286,10 @@ resource "google_service_account" "nakama" {
   account_id   = "fetchpep-dev-nakama"
   display_name = "Nakama VM"
   description  = "The Nakama VM's own identity. Reads its secrets and writes logs. Nothing else."
+
+  # IAM has to be on before an account or a role can be created. D-099 took the kill
+  # switch's API resource out of the first apply, so this stack waits on its own.
+  depends_on = [google_project_service.federation]
 }
 
 # Logs and metrics only. Access to a secret is granted per secret, in infra/dev/secrets.tf.

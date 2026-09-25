@@ -343,10 +343,15 @@ developer never applies. Nothing in this part is automatic.
 Everything below runs from a clone of `main`. Get one, or bring an existing one up to date:
 
 ```
-cd ~ && gh repo clone roguepowell-ai/fetchpep      # first time
-cd ~/fetchpep && git checkout main && git pull     # every time after
-git config core.hooksPath .githooks                # once per clone
+git clone https://github.com/roguepowell-ai/fetchpep.git ~/fetchpep   # first time only
+cd ~/fetchpep && git checkout main && git pull                        # every time
+git config core.hooksPath .githooks                                   # once per clone
 ```
+
+`git clone` over HTTPS, not `gh repo clone`: the repository is public
+(`ops/INFRA.ops.md`), so no sign-in is needed, and a fresh Cloud Shell has no `gh auth`.
+The `cd` is on the second line for a reason — run from `~`, the third line would configure
+nothing, because `~` is not a repository.
 
 ```
 verify: cd ~/fetchpep && git log --oneline -1   is the merge you mean to apply
@@ -365,18 +370,18 @@ mkdir -p ~/tfbin && cd ~/tfbin \
   && curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_SHA256SUMS \
   && curl -sfLO https://releases.hashicorp.com/terraform/1.16.4/terraform_1.16.4_linux_amd64.zip \
   && sha256sum -c --ignore-missing terraform_1.16.4_SHA256SUMS \
+  && echo "dc94af0eef1147718ad7c8daea792ed199e3e0492eec180d0adafa2a65a879df  terraform_1.16.4_linux_amd64.zip" \
+       | sha256sum -c - \
   && unzip -o terraform_1.16.4_linux_amd64.zip \
   && export PATH="$HOME/tfbin:$PATH" \
   && terraform version
 terraform login          # a browser token for app.terraform.io, once per machine
 ```
 
-The expected hash is in `ops/VERSIONS.ops.md`, so a `SHA256SUMS` served by a compromised
-host is checkable against something we wrote down:
-
-```
-dc94af0eef1147718ad7c8daea792ed199e3e0492eec180d0adafa2a65a879df  terraform_1.16.4_linux_amd64.zip
-```
+The second `sha256sum -c` is not a duplicate of the first. The first checks the zip against
+a `SHA256SUMS` fetched from the same host, which proves nothing if that host is serving both.
+The second checks it against the hash written down in `ops/VERSIONS.ops.md`, by us, when this
+was written.
 
 [certain] This does **not** verify HashiCorp's signature. The `.sig` file and their GPG key
 would do that; the pinned hash covers the case that matters here — the file changing between
@@ -465,6 +470,15 @@ Each step needs the one before it.
    warn_amount`, and the billing id in `000000-000000-000000` form. Use the real ones from
    D-071 — they change nothing today and are right when the kill switch is applied at launch.
 
+   The billing account id is **not a secret** (`ops/INFRA.ops.md` says as much of the project
+   identifiers). It is in Console → Billing → Account management, or:
+
+   ```
+   gcloud billing projects describe fetchpep-dev --format='value(billingAccountName)'
+   ```
+
+   which prints `billingAccounts/000000-000000-000000`; pass the part after the slash.
+
    ```
    cd ~/fetchpep/infra/bootstrap
    terraform init                    # creates the workspace; then set Execution mode Local
@@ -496,8 +510,16 @@ Each step needs the one before it.
    "kill" in the address.
 
    ```
-   terraform show -json trust.plan | jq -r '.resource_changes[].address' | sort > planned.txt
+   terraform show -json trust.plan | jq -r '.resource_changes[].address' \
+     | sed 's/\[.*\]//' | sort -u > planned.txt
    ```
+
+   The `sed` is load-bearing. A `for_each` resource appears in the plan with its instance
+   key — `google_project_service.apis["pubsub.googleapis.com"]`, not
+   `google_project_service.apis` — so an exact-match test against the bare address would
+   never catch `apis`, which is the one `for_each` resource in `kill_switch.tf` and the one
+   most likely to be pulled in by accident. Stripping the key first makes the comparison
+   honest.
 
    Every one of `kill_switch.tf`'s eighteen addresses must be **absent** from it:
 
@@ -527,6 +549,12 @@ Each step needs the one before it.
    ```
    verify: the loop prints nothing at all (D-099, D-072)
    ```
+
+   **If the apply fails on a permission or a disabled service, run the same plan and apply
+   again.** Enabling an API is not instant, and a call made in the same apply that switched
+   it on can arrive before it has propagated. The `depends_on` in `workload_identity.tf`
+   orders it, but ordering is not waiting. Nothing here is harmed by a second run: every
+   resource is created once and named the same way.
 
    Then `terraform apply trust.plan`.
 
@@ -670,12 +698,24 @@ Each step needs the one before it.
    shows the whole thing working rather than each piece being present. Leave the forward from
    step 7 open in one Cloud Shell tab and run this in another.
 
+   **Start in the repository**, because the release file is read by a relative path and a
+   new Cloud Shell tab opens in `~`:
+
+   ```
+   cd ~/fetchpep
+   ```
+
    The HTTP key is a secret, so it comes out of Secret Manager into a shell variable and is
-   never typed, pasted or echoed:
+   never typed or pasted:
 
    ```
    HTTP_KEY=$(gcloud secrets versions access latest --secret nakama-http-key --project fetchpep-dev)
    ```
+
+   [certain] It does still reach `curl`'s argv below, so it is visible in `ps` to other
+   processes on this Cloud Shell VM — George's own machine, for the minute the test takes.
+   That is a different risk from the VM's own handling, where the startup script keeps every
+   value off the command line. `unset HTTP_KEY` at the end, and do not leave the tab open.
 
    **Publish release 1.** The payload is a JSON *string* containing the file, which is what
    Nakama's HTTP RPC expects:
@@ -702,15 +742,31 @@ Each step needs the one before it.
         -c "SELECT id, door, outcome, idempotency_key FROM directory.door_log ORDER BY id"'
    ```
 
+   **Nakama wraps an RPC result**, so the reply is a JSON object whose `payload` is a JSON
+   *string* — not the bare object. That is expected, not a fault:
+
    ```
-   verify: publish_release  →  {"outcome":"applied","release":1,"phases":1,"species":1,
-                                "coats":1,"door_log_id":1}
-           read_catalogue   →  count 1, the Reedling, artist and creator Joshua
+   {"payload":"{\"outcome\":\"applied\",\"release\":1,…}"}
+   ```
+
+   Pipe it through `python3 -c 'import sys,json;print(json.load(sys.stdin)["payload"])'` to
+   read it, or add `&unwrap` to the URL.
+
+   ```
+   verify: publish_release  →  payload {"outcome":"applied","release":1,"phases":1,
+                               "species":1,"coats":1,"door_log_id":1}
+           read_catalogue   →  payload count 1, the Reedling, artist and creator Joshua
            door_log         →  one row, publish / applied / release-0001
    ```
 
    A second identical `publish_release` must return `{"outcome":"duplicate",…}` and write
    nothing. That is the idempotency key doing its job, and it is worth one extra call to see.
+
+   Then:
+
+   ```
+   unset HTTP_KEY
+   ```
 
    If all three pass, the VM is doing what brief B-002 asked for. Anything else: the
    containers' logs, over the forward, with
