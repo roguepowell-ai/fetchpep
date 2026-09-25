@@ -37,8 +37,9 @@ provider "google" {
 # role carries `serviceusage.services.enable` and deliberately not `.disable` — see
 # infra/bootstrap.
 #
-# `pubsub.googleapis.com` is not here: the rotation topic lives in the bootstrap stack,
-# which enables Pub/Sub for the kill switch already.
+# `pubsub.googleapis.com` is not here: the rotation topic lives in the bootstrap stack, and
+# that stack's own `federation` enables Pub/Sub for it. (`kill_switch.tf` also names it, but
+# that resource is excluded from the first apply under D-099, so it is not what turns it on.)
 resource "google_project_service" "apis" {
   for_each = toset([
     "compute.googleapis.com",
