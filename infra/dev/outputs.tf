@@ -15,8 +15,16 @@ output "internal_ip" {
 }
 
 output "service_account" {
-  description = "The VM's own identity. Reads four secrets, writes logs, nothing else."
-  value       = google_service_account.nakama.email
+  description = "The VM's own identity. Reads its secrets, writes logs, nothing else. Created in infra/bootstrap; read here."
+  value       = data.google_service_account.nakama.email
+}
+
+output "pgdata_disk" {
+  description = "The database's own disk. Separate from the boot disk so that replacing the VM cannot destroy it."
+  value = {
+    name = google_compute_disk.pgdata.name
+    gb   = google_compute_disk.pgdata.size
+  }
 }
 
 output "secrets" {

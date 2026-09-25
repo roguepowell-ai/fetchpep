@@ -71,6 +71,20 @@ tools only.** A fix means matching on Bash commands as well, which is a decision
 that parses shell has its own failure mode, and refusing every write-shaped Bash command
 would stop ordinary work.
 
+**Update, 25 Sep — a second, separate hole, found and closed.** The guard was also broken by
+the *working directory*, which is not the same bug and had nothing to do with Bash.
+`.claude/settings.json` ran it as `node hooks/guard-write.mjs`, a relative path, so from any
+subdirectory the hook failed to load — and [certain] Claude Code treats a hook that exits 1
+as a non-blocking error, so **every write was allowed**. Inside the hook, two more things
+were relative to the working directory. Measured from `infra/dev` against the version on
+main: a `george-only` file was still **blocked** (the `rules/` prefix test failed but the
+frontmatter arm reads the absolute path and caught it), and a **banned term was allowed**,
+because the word list was opened by a relative path, was not found, and an empty list
+matches nothing. Fixed in PR #20: the command uses `$CLAUDE_PROJECT_DIR`, and the hook
+anchors on its own location instead of `process.cwd()`. Proven from four working
+directories, one of them outside the repo. O-73 itself — that Bash writes are not seen at
+all — stands.
+
 **O-74 · `services/nakama/build/index.js` is committed and nothing checks it matches `src/`.**
 Nakama loads one JavaScript file. The VM has no build step and there is no image registry
 of ours (the kill switch's Artifact Registry repository is the kill switch's, D-070), so
@@ -116,6 +130,39 @@ A reboot in a busy hour can fail to start the service, and the failure reads as 
 rather than as a quota. Both tags are exact, so what is at risk is availability, not what
 gets run. The fix is to mirror both images into Artifact Registry in `fetchpep-dev` and pull
 from there: a new repository, a new cost line and a decision, so not in #13.
+
+**O-79 · What `infra/dev` cannot prove without an apply.**
+The developer never applies (D-067), so five things in PR #20 are reasoned from
+documentation rather than seen working. Listed here so the first apply is read as a test
+rather than a formality, and so a failure is recognised instead of debugged from scratch:
+1. **`/var` is `noexec` on Container-Optimized OS** [certain, from the CIS benchmark for
+   COS], so the Compose binary gets `app_dir/bin` its own `mount --bind` plus
+   `remount,exec`. The startup script runs `docker-compose version` straight afterwards and
+   exits with the mount options in the log if it did not take. Unproven until a VM boots.
+2. **The apply runner's role set.** Nine roles and a custom one, chosen narrow on purpose.
+   A missing permission fails the apply with the permission named. The fix is another named
+   role, never `roles/editor`.
+3. **The Secret Manager service agent.** `secrets.tf` grants
+   `service-<number>@gcp-sa-secretmanager.iam.gserviceaccount.com` publisher on the rotation
+   topic by its well-known address. [likely] The agent is created when the API is first
+   enabled; if the binding is refused because it does not exist yet, the fix is to enable
+   the API, wait, and re-apply.
+4. **Instance metadata size.** Seven files go up as metadata, the two migrations being most
+   of it — about 55 KB against a 256 KB limit per key and 512 KB in total. Comfortable, but
+   it is a ceiling that grows with every migration, and migration 0003 is already coming
+   (D-091).
+5. **The HCP Terraform workspace's working directory** must be `infra/dev` with the whole
+   repository uploaded, because `vm_nakama.tf` reads `../../services/nakama/...`. Written up
+   in `ops/RUNBOOK.ops.md` Part 5, step 20.
+
+**O-80 · Rotation notices go to a topic nothing listens to.**
+D-089 gives every secret a rotation period. [certain] Secret Manager's rotation does not
+create a version — it publishes a notice to `fetchpep-dev-secret-rotation` saying one is
+due, and the rotation itself is the procedure in `ops/RUNBOOK.ops.md` Part 5, run by a
+person. Nothing is subscribed to that topic, so the notice reaches nobody: the schedule
+currently records an intention rather than prompting anyone. Same shape as O-70, where a
+kill-switch error only shows in a log. Both want a notification channel, which wants an
+email address in Terraform, which is one decision covering both.
 
 ## Blocking the world map
 

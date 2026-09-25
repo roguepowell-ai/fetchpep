@@ -255,10 +255,27 @@ var publishRelease = function (ctx, logger, nk, payload) {
         ]);
     }
     catch (e) {
-        // Nothing was written — the whole thing was one statement. Log the refusal under the
-        // same key so the attempt is on the record, then say so.
+        // Nothing was written — the whole thing was one statement.
+        //
+        // The attempt still goes in the door log, but **not under the caller's key**. The key
+        // is unique, so a row under it would be the last word on this release forever: every
+        // retry of the same file would read that row back and return `duplicate`, and the only
+        // way to publish would be to edit the idempotency key in a release file that is
+        // supposed to be immutable. A failure that cannot be retried is worse than one that is
+        // not recorded, and this way it is both retried and recorded.
+        //
+        // Only a validation refusal above uses up a key, because that one is the caller's
+        // fault and re-sending the same bytes would fail the same way.
         var reason = "" + e;
-        logRejected(nk, "publish", PUBLISH_CALLER, key, requestSha256, reason);
+        var attemptKey = key + "#error-" + new Date().toISOString();
+        try {
+            logRejected(nk, "publish", PUBLISH_CALLER, attemptKey, requestSha256, "could not apply; the key " + key + " is still free to retry: " + reason);
+        }
+        catch (logFailure) {
+            // The database is the thing that just failed, so this can fail too. Never let it
+            // replace the error that matters.
+            logger.error("publish_release: could not log the failed attempt — %s", "" + logFailure);
+        }
         logger.error("publish_release: %s failed to apply — %s", key, reason);
         throw doorError(CODE_INTERNAL, "publish_release could not apply the release");
     }

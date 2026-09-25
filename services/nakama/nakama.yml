@@ -1,9 +1,13 @@
 # Nakama server configuration — the template, with no secret in it (R-SEC-01).
 #
-# `render-config.sh` turns this into `nakama.runtime.yml` by replacing the four @@TOKEN@@
+# `render-config.sh` turns this into `nakama.runtime.yml` by replacing the seven @@TOKEN@@
 # placeholders with values read from Secret Manager. The rendered file is 0600, is never
 # committed, and is what the container actually reads. The placeholders are the only
 # difference between the two files.
+#
+# Three of the seven exist because Nakama has a default for them and the default is in its
+# published source: `session.encryption_key`, `session.refresh_encryption_key` and
+# `console.signing_key`. A signing key everybody has is not a signing key.
 #
 # Secrets are in the file rather than on the command line on purpose: a flag is visible in
 # `ps` to every process on the host and lands in any process listing that gets logged
@@ -39,6 +43,10 @@ console:
   port: 7351
   username: "admin"
   password: "@@CONSOLE_PASSWORD@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+  # Signs the console's own tokens. Left unset, Nakama uses a value published in its own
+  # source, and anyone who reaches 7351 can then mint an admin token without the password
+  # above — which would make the password decorative.
+  signing_key: "@@CONSOLE_SIGNING_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
 
 # The game logic (D-062). `path` holds the modules; `js_entrypoint` is relative to it.
 # docker-compose.yml mounts ./build there, so the file is build/index.js in the repo and
@@ -58,3 +66,8 @@ social:
 session:
   token_expiry_sec: 7200
   refresh_token_expiry_sec: 604800
+  # The same reasoning as console.signing_key: unset, these take Nakama's published
+  # defaults, and a session token signed with a published key is a session anyone can forge
+  # — any player, as any other player, without signing in (R-SEC-02).
+  encryption_key: "@@SESSION_ENCRYPTION_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot
+  refresh_encryption_key: "@@SESSION_REFRESH_ENCRYPTION_KEY@@"   # allow-secret: @@TOKEN@@ placeholder, rendered from Secret Manager at boot

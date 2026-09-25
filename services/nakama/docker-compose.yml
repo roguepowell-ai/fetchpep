@@ -26,9 +26,17 @@ services:
       # Corruption that is not detected is corruption that gets backed up.
       POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # A named volume locally, a path on the database disk on the VM. On the VM the
+      # database must not live on the boot disk, because a boot disk is a thing that gets
+      # replaced (infra/dev/vm_nakama.tf).
+      - ${PGDATA_PATH:-pgdata}:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nakama -d nakama"]
+      # `-h 127.0.0.1`, not the default. Without it pg_isready checks the Unix socket, and
+      # the image's entrypoint runs a temporary server on the socket *while it initialises*
+      # — with TCP not listening yet. The container would go healthy during initdb, migrate
+      # would connect over TCP, fail, and stop for good on `restart: "no"`, leaving Nakama
+      # waiting for a service that never comes.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U nakama -d nakama"]
       interval: 5s
       timeout: 5s
       retries: 30

@@ -12,7 +12,27 @@
 // and feeds stderr back to the model as the reason.
 
 import { readFileSync, existsSync } from "node:fs";
-import { relative, sep } from "node:path";
+import { relative, sep, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The repo root, worked out from this file's own location rather than from the working
+// directory.
+//
+// Two things here were relative to the working directory, and only one of them mattered.
+// Measured from `infra/dev` against the version on main, 25 Sep:
+//
+//   george-only file    BLOCKED, exit 2   — the `rules/` prefix test did fail, because
+//                                           `rel` came out as `../../rules/…`, but the
+//                                           frontmatter arm reads the absolute path and
+//                                           caught it anyway. Two arms, one held.
+//   banned term         ALLOWED, exit 0   — `checks/banned-terms.txt` was opened by a
+//                                           relative path, was not found, and an empty
+//                                           list matches nothing. Silently open.
+//
+// So the authority guard held and the language guard did not. Anchoring on this file's own
+// location fixes both, and leaves the guard independent of where the process starts. This
+// file is always <root>/hooks/, so the parent of its directory is the root.
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const ALLOW = 0;
 const BLOCK = 2;
@@ -25,7 +45,7 @@ const UNITY_ASSET = /\.(unity|prefab|asset|meta|controller|mat)$/i;
 // Cross-reference tokens. A line carrying one of these is load-bearing.
 const UNITY_REF = /\b(guid|fileID|m_CorrespondingSourceObject|m_PrefabInstance)\s*:/;
 
-const BANNED_TERMS_FILE = "checks/banned-terms.txt";
+const BANNED_TERMS_FILE = join(ROOT, "checks/banned-terms.txt");
 
 // R-SEC-01. A secret in git history is permanent — rotation is the only remedy — so
 // this blocks the write rather than catching the commit. Exempt a line with a trailing
@@ -85,7 +105,7 @@ const ti = input.tool_input ?? {};
 const filePath = ti.file_path ?? ti.notebook_path ?? "";
 if (!filePath) process.exit(ALLOW);
 
-const rel = relative(process.cwd(), filePath).split(sep).join("/");
+const rel = relative(ROOT, filePath).split(sep).join("/");
 
 // ---------------------------------------------------------------- 1. authority
 if (rel.startsWith("rules/") || frontmatterAuthority(filePath) === "george-only") {

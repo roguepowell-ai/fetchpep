@@ -1,8 +1,9 @@
-# Backups (D-063): a daily snapshot of the boot disk, kept for a bounded time.
+# Backups (D-063): a daily snapshot of both disks, kept for a bounded time.
 #
-# The boot disk is the whole of it. PostgreSQL's data directory is a docker volume on that
-# disk, so a snapshot of the disk is a snapshot of the database — and of the migrations,
-# the module and the rendered config with it.
+# Both, because the database moved to its own disk (vm_nakama.tf). The data disk is the one
+# that matters; the boot disk is snapshotted too because it carries the rendered config and
+# the module, and restoring one without the other would give a database with nothing
+# serving it.
 #
 # **Proposed retention: 14 days.** The reasoning, since the brief asks for a number rather
 # than a default: the failure a snapshot has to survive is one nobody notices immediately —
@@ -55,5 +56,11 @@ resource "google_compute_disk_resource_policy_attachment" "nakama_boot" {
   name = google_compute_resource_policy.daily_snapshot.name
   # A Compute instance's boot disk takes the instance's name unless it is given another.
   disk = google_compute_instance.nakama.name
+  zone = local.zone
+}
+
+resource "google_compute_disk_resource_policy_attachment" "nakama_pgdata" {
+  name = google_compute_resource_policy.daily_snapshot.name
+  disk = google_compute_disk.pgdata.name
   zone = local.zone
 }

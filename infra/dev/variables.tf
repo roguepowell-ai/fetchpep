@@ -15,6 +15,33 @@ variable "snapshot_retention_days" {
   }
 }
 
+variable "first_rotation_time" {
+  description = <<-EOT
+    When the first rotation notice fires, RFC 3339 and in the future at apply time. Secret
+    Manager moves it on by each secret's period after that, and `ignore_changes` in
+    secrets.tf keeps Terraform from dragging it back. It is an input rather than a computed
+    value because `timestamp()` would make every plan show a change.
+  EOT
+  type        = string
+  default     = "2026-12-01T03:00:00Z"
+
+  validation {
+    condition     = can(formatdate("YYYY-MM-DD", var.first_rotation_time))
+    error_message = "first_rotation_time must be an RFC 3339 timestamp, for example 2026-12-01T03:00:00Z."
+  }
+}
+
+variable "pgdata_disk_gb" {
+  description = "Size of the PostgreSQL data disk. Separate from the boot disk so that replacing the VM cannot destroy the database."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.pgdata_disk_gb >= 10
+    error_message = "pgdata_disk_gb must be at least 10."
+  }
+}
+
 variable "tunnel_users" {
   description = <<-EOT
     Principals who may open an IAP tunnel to the VM, each in IAM form, for example
@@ -41,8 +68,14 @@ locals {
   iap_range = "35.235.240.0/20"
 
   # Where the service lives on the VM. /var is the writable, persistent part of a
-  # Container-Optimized OS disk.
+  # Container-Optimized OS disk — and [certain] it is mounted `noexec`, which is why the
+  # startup script gives `app_dir/bin` its own exec bind-mount rather than assuming it can
+  # run what it downloads there.
   app_dir = "/var/lib/fetchpep/nakama"
+
+  # The PostgreSQL data directory, on its own disk. Not under app_dir: app_dir is on the
+  # boot disk, and a boot disk is a thing that gets replaced.
+  pgdata_dir = "/var/lib/fetchpep/pgdata"
 
   service_dir = "${path.module}/../../services/nakama"
 }
