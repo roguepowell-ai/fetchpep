@@ -18,7 +18,7 @@
 # by the one apply that already runs with George's own rights, and `infra/dev` only reads it.
 
 # ------------------------------------------------------------------------ APIs
-# **Every API this stack needs is declared here, including four that `kill_switch.tf` also
+# **Every API this stack needs is declared here, including three that `kill_switch.tf` also
 # names.**
 #
 # This file used to declare only what that one did not, and lean on its
@@ -26,7 +26,15 @@
 # at the trust resources and excludes every `kill_switch.tf` resource, `apis` among them. So
 # on a fresh project nothing would enable `iam` or `cloudresourcemanager`, and the first
 # service account, custom role or IAM binding would fail with SERVICE_DISABLED. What this
-# stack needs, this stack owns.
+# stack needs, this stack declares.
+#
+# **In practice George switches them on by hand before the first apply** —
+# `ops/RUNBOOK.ops.md` Part 5 step 0, one `gcloud services enable`. A one-time activation is
+# something a person does once rather than something buried in code that runs every apply.
+# These declarations are not the mechanism, then; they are the record. On a service that is
+# already on they do nothing, and they mean the configuration still describes what the
+# project needs, so a rebuild from the repository alone gets a working project and nobody
+# has to remember step 0 to know what it did.
 #
 # Two Terraform resources naming one service is untidy, and it is the least bad of three:
 # the alternatives were editing `kill_switch.tf` (D-070) or breaking D-099. It is safe
@@ -142,8 +150,8 @@ resource "google_project_iam_custom_role" "tf_apply" {
     "resourcemanager.projects.get",
   ]
 
-  # IAM has to be on before an account or a role can be created. D-099 took the kill
-  # switch's API resource out of the first apply, so this stack waits on its own.
+  # Kept although step 0 has already enabled IAM by hand: ordering costs nothing here, and
+  # it is what makes a rebuild from the repository alone work without that step.
   depends_on = [google_project_service.federation]
 }
 
@@ -162,8 +170,8 @@ resource "google_project_iam_custom_role" "tf_plan" {
     "resourcemanager.projects.get",
   ]
 
-  # IAM has to be on before an account or a role can be created. D-099 took the kill
-  # switch's API resource out of the first apply, so this stack waits on its own.
+  # Kept although step 0 has already enabled IAM by hand: ordering costs nothing here, and
+  # it is what makes a rebuild from the repository alone work without that step.
   depends_on = [google_project_service.federation]
 }
 
@@ -177,8 +185,8 @@ resource "google_service_account" "tfc_plan" {
   display_name = "HCP Terraform — plan phase, fetchpep-dev"
   description  = "Read-only. Impersonated by plan runs through workload identity (D-064). Holds no key."
 
-  # IAM has to be on before an account or a role can be created. D-099 took the kill
-  # switch's API resource out of the first apply, so this stack waits on its own.
+  # Kept although step 0 has already enabled IAM by hand: ordering costs nothing here, and
+  # it is what makes a rebuild from the repository alone work without that step.
   depends_on = [google_project_service.federation]
 }
 
@@ -187,8 +195,8 @@ resource "google_service_account" "tfc_apply" {
   display_name = "HCP Terraform — apply phase, fetchpep-dev"
   description  = "Creates what infra/dev declares. Impersonated by apply runs only. Holds no key."
 
-  # IAM has to be on before an account or a role can be created. D-099 took the kill
-  # switch's API resource out of the first apply, so this stack waits on its own.
+  # Kept although step 0 has already enabled IAM by hand: ordering costs nothing here, and
+  # it is what makes a rebuild from the repository alone work without that step.
   depends_on = [google_project_service.federation]
 }
 
@@ -287,8 +295,8 @@ resource "google_service_account" "nakama" {
   display_name = "Nakama VM"
   description  = "The Nakama VM's own identity. Reads its secrets and writes logs. Nothing else."
 
-  # IAM has to be on before an account or a role can be created. D-099 took the kill
-  # switch's API resource out of the first apply, so this stack waits on its own.
+  # Kept although step 0 has already enabled IAM by hand: ordering costs nothing here, and
+  # it is what makes a rebuild from the repository alone work without that step.
   depends_on = [google_project_service.federation]
 }
 

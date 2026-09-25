@@ -31,8 +31,11 @@ provider "google" {
   zone    = local.zone
 }
 
-# The APIs this stack needs. The apply runner's custom role carries
-# `serviceusage.services.enable` and deliberately not `.disable` — see infra/bootstrap.
+# The APIs this stack needs. George switches them on by hand before the first apply
+# (`ops/RUNBOOK.ops.md` Part 5 step 0); these declarations are the record rather than the
+# mechanism, and they do nothing to a service that is already on. The apply runner's custom
+# role carries `serviceusage.services.enable` and deliberately not `.disable` — see
+# infra/bootstrap.
 #
 # `pubsub.googleapis.com` is not here: the rotation topic lives in the bootstrap stack,
 # which enables Pub/Sub for the kill switch already.
@@ -42,6 +45,14 @@ resource "google_project_service" "apis" {
     "iap.googleapis.com",
     "oslogin.googleapis.com",
     "secretmanager.googleapis.com",
+    # The VM's own account holds roles/logging.logWriter and roles/monitoring.metricWriter
+    # (infra/bootstrap), so the VM needs both services on to write a line or a metric.
+    # `logging` is also named in kill_switch.tf — a different stack and a different state, so
+    # more separate than the overlap within bootstrap, and `disable_on_destroy = false` on
+    # both. `monitoring` was declared nowhere until now, which would have left a rebuild from
+    # the repository alone short of it.
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
   ])
 
   service            = each.value
