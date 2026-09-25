@@ -142,11 +142,12 @@ rather than a formality, and so a failure is recognised instead of debugged from
 2. **The apply runner's role set.** Nine roles and a custom one, chosen narrow on purpose.
    A missing permission fails the apply with the permission named. The fix is another named
    role, never `roles/editor`.
-3. **The Secret Manager service agent.** `secrets.tf` grants
+3. **The Secret Manager service agent.** `infra/bootstrap/workload_identity.tf` grants
    `service-<number>@gcp-sa-secretmanager.iam.gserviceaccount.com` publisher on the rotation
-   topic by its well-known address. [likely] The agent is created when the API is first
-   enabled; if the binding is refused because it does not exist yet, the fix is to enable
-   the API, wait, and re-apply.
+   topic by its well-known address. [likely] The agent is created the first time the service
+   is used, and a binding to a principal that does not exist is refused. `ops/RUNBOOK.ops.md`
+   Part 5 step 0 creates it first with `gcloud beta services identity create`; if the apply
+   still refuses the binding, that step did not take.
 4. **Instance metadata size.** Seven files go up as metadata, the two migrations being most
    of it — about 55 KB against a 256 KB limit per key and 512 KB in total. Comfortable, but
    it is a ceiling that grows with every migration, and migration 0003 is already coming
@@ -154,6 +155,20 @@ rather than a formality, and so a failure is recognised instead of debugged from
 5. **The HCP Terraform workspace's working directory** must be `infra/dev` with the whole
    repository uploaded, because `vm_nakama.tf` reads `../../services/nakama/...`. Written up
    in `ops/RUNBOOK.ops.md` Part 5, step 20.
+
+**O-81 · `.claude/settings.json` has no tier in `CLAUDE.md` section 6.**
+It is the file that decides whether the write guard runs at all, and section 6's table says
+nothing about `.claude/`. The nearest thing to a rule is O-39, which records that the remote
+tools could not write there and George placed the files by hand. The developer edited it in
+PR #20 — the hook was failing to load, and the PM's instruction on issue #13 was to fix it
+"in `.claude/settings.json` or the hook itself, whichever is right. It's your call (D-069)".
+That instruction covers the one edit; it does not settle the tier. Raised by the PR #20
+re-review. **Proposed:** add a row reading `` `.claude/` | `claude-writes`, except
+`settings.local.json`, which is per-seat and untracked ``, on the grounds that the guard's
+own wiring is the developer's to keep working and CI plus the reviewer are the backstop. The
+opposite reading is just as defensible — a guard whose subject can edit its own wiring is
+weaker than one that cannot — and that one makes it `george-only`. `CLAUDE.md` is George's
+file either way, so this is a proposal and nothing more.
 
 **O-80 · Rotation notices go to a topic nothing listens to.**
 D-089 gives every secret a rotation period. [certain] Secret Manager's rotation does not

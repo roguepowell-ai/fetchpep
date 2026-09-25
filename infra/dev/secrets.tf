@@ -22,23 +22,13 @@
 # being forgotten, and `rotation` cannot be set at all without a `topics` entry, which is
 # why the topic exists.
 
-resource "google_pubsub_topic" "secret_rotation" {
-  name = "fetchpep-dev-secret-rotation"
-
-  message_storage_policy {
-    allowed_persistence_regions = [local.location]
-  }
-
-  depends_on = [google_project_service.apis]
-}
-
-# [certain] Secret Manager publishes rotation notices as its own service agent, and refuses
-# to create a secret with `topics` unless that agent can already publish to the topic. The
-# address is the well-known one for the service, derived from the project number.
-resource "google_pubsub_topic_iam_member" "secret_manager_publisher" {
-  topic  = google_pubsub_topic.secret_rotation.id
-  role   = "roles/pubsub.publisher"
-  member = "serviceAccount:service-${local.project_number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
+# The rotation topic and its publisher grant are in **infra/bootstrap**, not here. Creating
+# them from this stack would mean giving the Terraform runner Pub/Sub rights across the
+# project, and `roles/pubsub.admin` reaches the kill switch's own topic, its Eventarc
+# subscription and its billing publisher grant (D-070). Naming a topic costs no permission,
+# so this stack only names it.
+locals {
+  secret_rotation_topic = "projects/${local.project_id}/topics/fetchpep-dev-secret-rotation"
 }
 
 locals {
@@ -124,12 +114,16 @@ resource "google_secret_manager_secret" "nakama" {
   }
 
   topics {
-    name = google_pubsub_topic.secret_rotation.id
+    name = local.secret_rotation_topic
   }
 
   rotation {
-    rotation_period    = "${each.value.rotation_days * 24 * 60 * 60}s"
-    next_rotation_time = var.first_rotation_time
+    rotation_period = "${each.value.rotation_days * 24 * 60 * 60}s"
+
+    # One period after the base, per secret — not the same date for all eight. With one
+    # shared date the 365-day secrets would have sent their first notice on the base date,
+    # which is the one thing a 365-day period is meant to avoid.
+    next_rotation_time = timeadd(var.first_rotation_time, "${each.value.rotation_days * 24}h")
   }
 
   lifecycle {
@@ -139,10 +133,7 @@ resource "google_secret_manager_secret" "nakama" {
     ignore_changes = [rotation[0].next_rotation_time]
   }
 
-  depends_on = [
-    google_project_service.apis,
-    google_pubsub_topic_iam_member.secret_manager_publisher,
-  ]
+  depends_on = [google_project_service.apis]
 }
 
 # The VM's service account may read each one, and nothing else about them. Not

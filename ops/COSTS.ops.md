@@ -16,28 +16,35 @@ Ceiling: **£200/month.** Figures below are from planning and are unverified aga
 | Sprite editor | ~£17 once |
 | Android test device | not yet bought |
 
-## Running — about £21–22/month at ten test users
+## Running — approved at about £18–19/month at ten test users
 
-Approved by George at that figure (**D-092**), which makes it the cost of record. Apple
-amortised takes it to roughly £28–29/month.
+**£18–19 ($24.5–25) is the approved figure — George's, under D-092.** That is the number of
+record. Apple amortised takes it to roughly £25–26/month.
 
-List prices for `europe-west2`, from `infra/dev` as built in PR #20. Not a bill: nothing has
-been applied.
+**The stack as built comes to about £19.5–20 ($25.8–26.2)**, roughly $1 more. That is a
+proposal, not a decision: it is the cost of putting the database on its own disk, added
+after the review George's approval was based on. About $1 is inside "a few dollars", so
+D-092 does not send it back to him; it is recorded here so the difference is visible rather
+than absorbed.
+
+List prices for `europe-west2`, from `infra/dev` as built in PR #20. **Not a bill** —
+nothing has been applied.
 
 | | USD/month |
 |---|---|
-| e2-small VM | 15.76 |
+| e2-small VM, 730 h | 15.76 |
 | Boot disk, 20 GB pd-balanced | ~2.40 |
 | Database disk, 20 GB pd-balanced | ~2.40 |
 | Cloud NAT gateway, one VM | ~1.02 |
 | Cloud NAT external address | ~3.65 |
 | NAT data processing | ~0.05–0.15 |
 | Snapshots, 14 daily across both disks | ~0.30–0.60 |
-| Secret Manager, 8 secrets | 0.00–0.12 |
-| Flow logs, firewall logs, Monitoring, IAP, workload identity | inside free tiers |
-| **Total** | **~27.5–28, about £21–22** |
+| Secret Manager, 8 versions, first 6 free | ~0.12 |
+| Rotation notices at $0.05 | ~0.10 |
+| Flow logs, firewall logs, Monitoring, IAP, workload identity, Pub/Sub | inside free tiers |
+| **Total** | **~25.8–26.2, about £19.5–20** |
 
-**This page used to say £11 and that the VM was 100% of it.** It is about 57%. The rest is
+**This page used to say £11 and that the VM was 100% of it.** It is about 60%. The rest is
 storage and the NAT address, neither of which was counted. Corrected under D-092 rather than
 quietly: the earlier figure was an estimate nobody had built against, and the difference is
 the sort that turns into a surprise on a bill.

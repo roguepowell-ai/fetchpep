@@ -109,6 +109,7 @@ resource "google_compute_instance" "nakama" {
     # The service, file by file. No secret is among them: nakama.yml carries placeholders
     # and the startup script fills them from Secret Manager (R-SEC-01).
     fetchpep-compose        = file("${local.service_dir}/docker-compose.yml")
+    fetchpep-compose-vm     = file("${local.service_dir}/docker-compose.vm.yml")
     fetchpep-nakama-config  = file("${local.service_dir}/nakama.yml")
     fetchpep-render-config  = file("${local.service_dir}/render-config.sh")
     fetchpep-migrate-run    = file("${local.service_dir}/migrations/run.sh")

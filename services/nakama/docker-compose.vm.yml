@@ -1,0 +1,24 @@
+# The VM's overlay on docker-compose.yml. Used only by the startup script, as
+# `-f docker-compose.yml -f docker-compose.vm.yml`.
+#
+# One change, and it is a safety one. The base file keeps PostgreSQL's data in a named
+# volume, which is right for a local run. On the VM the data belongs on its own disk, so
+# that replacing the instance cannot destroy it (infra/dev/vm_nakama.tf) — and the bind is
+# written in long syntax purely for `create_host_path: false`.
+#
+# [certain] With the short syntax, a bind whose source is missing is *created* by Docker, as
+# an empty directory owned by root. If the data disk failed to mount, PostgreSQL would then
+# find an empty directory, run initdb into it, and come up as a healthy, empty database —
+# with the real one sitting unmounted and untouched. The server would serve nothing and
+# nothing would look wrong. `create_host_path: false` makes that failure loud instead: the
+# container refuses to start. The startup script also checks `mountpoint` before it gets
+# here; this is the half that does not depend on the script being right.
+
+services:
+  postgres:
+    volumes:
+      - type: bind
+        source: ${PGDATA_PATH:?the startup script sets this to the data disk}
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false

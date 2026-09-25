@@ -101,6 +101,15 @@ resource "google_project_iam_custom_role" "tf_apply" {
     "secretmanager.secrets.setIamPolicy",
     "iap.tunnelInstances.getIamPolicy",
     "iap.tunnelInstances.setIamPolicy",
+
+    # Enabling an API, and **not** disabling one. `roles/serviceusage.serviceUsageAdmin`
+    # includes `serviceusage.services.disable`, and the kill switch needs cloudfunctions,
+    # run, eventarc, pubsub and billingbudgets to be on. An account that can switch those
+    # off is an account that can stop the kill switch working (D-070).
+    "serviceusage.services.enable",
+    "serviceusage.services.get",
+    "serviceusage.services.list",
+    "resourcemanager.projects.get",
   ]
 }
 
@@ -114,6 +123,9 @@ resource "google_project_iam_custom_role" "tf_plan" {
     "secretmanager.secrets.list",
     "secretmanager.secrets.getIamPolicy",
     "iap.tunnelInstances.getIamPolicy",
+    "serviceusage.services.get",
+    "serviceusage.services.list",
+    "resourcemanager.projects.get",
   ]
 }
 
@@ -137,8 +149,6 @@ resource "google_service_account" "tfc_apply" {
 resource "google_project_iam_member" "tfc_plan" {
   for_each = toset([
     "roles/compute.viewer",
-    "roles/pubsub.viewer",
-    "roles/serviceusage.serviceUsageViewer",
     google_project_iam_custom_role.tf_plan.id,
   ])
 
@@ -157,10 +167,6 @@ resource "google_project_iam_member" "tfc_apply" {
     "roles/compute.securityAdmin",
     # infra/dev/snapshots.tf — the snapshot schedule, and the data disk
     "roles/compute.storageAdmin",
-    # infra/dev/secrets.tf — the rotation notification topic and its publisher binding
-    "roles/pubsub.admin",
-    # infra/dev/versions.tf — enabling compute, secretmanager, pubsub and iap
-    "roles/serviceusage.serviceUsageAdmin",
     # infra/dev/secrets.tf — the secret containers and who may read each one, and
     # infra/dev/network.tf — who may open an IAP tunnel. Never a secret value.
     google_project_iam_custom_role.tf_apply.id,
@@ -184,6 +190,37 @@ resource "google_service_account_iam_member" "tfc_apply_impersonation" {
   service_account_id = google_service_account.tfc_apply.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.hcp_terraform.name}/attribute.workspace_phase/${local.tfc_workspace}:apply"
+}
+
+# ------------------------------------------------- the secret rotation topic
+# Here rather than in infra/dev, for the same reason as the VM's identity above.
+#
+# Secret Manager refuses to put a rotation schedule on a secret unless a Pub/Sub topic is
+# named and its own service agent can publish to it. Creating that topic and that binding
+# from infra/dev would mean giving the Terraform runner Pub/Sub rights across the project —
+# and `roles/pubsub.admin` includes `topics.delete`, `topics.setIamPolicy` and
+# `subscriptions.delete`, which reach the kill switch's budget topic, its Eventarc
+# subscription and its billing publisher grant (D-070). So the topic is created by the one
+# apply that already runs with George's own rights, and infra/dev only names it in a string.
+
+resource "google_pubsub_topic" "secret_rotation" {
+  name = "fetchpep-dev-secret-rotation"
+
+  message_storage_policy {
+    allowed_persistence_regions = [local.location]
+  }
+
+  depends_on = [google_project_service.federation]
+}
+
+# [certain] Secret Manager publishes rotation notices as its own service agent, and refuses
+# to create a secret with `topics` unless that agent can already publish. The address is the
+# well-known one for the service, derived from the project number. The agent has to exist
+# first — `ops/RUNBOOK.ops.md` Part 5 creates it before this stack is applied.
+resource "google_pubsub_topic_iam_member" "secret_manager_publisher" {
+  topic  = google_pubsub_topic.secret_rotation.id
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:service-${local.project_number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
 }
 
 # ------------------------------------------------------------- the VM's identity
@@ -261,4 +298,9 @@ output "tfc_workspace_variables" {
 output "nakama_service_account" {
   description = "The VM's identity, created here so that infra/dev never needs project IAM rights."
   value       = google_service_account.nakama.email
+}
+
+output "secret_rotation_topic" {
+  description = "Where Secret Manager sends rotation notices. infra/dev names it in a string; nothing is subscribed to it yet (O-80)."
+  value       = google_pubsub_topic.secret_rotation.id
 }

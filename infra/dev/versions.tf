@@ -31,8 +31,11 @@ provider "google" {
   zone    = local.zone
 }
 
-# The APIs this stack needs. The runner has roles/serviceusage.serviceUsageAdmin for
-# exactly this.
+# The APIs this stack needs. The apply runner's custom role carries
+# `serviceusage.services.enable` and deliberately not `.disable` — see infra/bootstrap.
+#
+# `pubsub.googleapis.com` is not here: the rotation topic lives in the bootstrap stack,
+# which enables Pub/Sub for the kill switch already.
 resource "google_project_service" "apis" {
   for_each = toset([
     "compute.googleapis.com",

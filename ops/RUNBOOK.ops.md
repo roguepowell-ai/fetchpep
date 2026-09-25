@@ -352,20 +352,45 @@ its *root* rather than its working directory would upload only that folder, and 
 
 Each step needs the one before it. Steps 1 and 3 are George's.
 
+0. **Create Secret Manager's service agent, before anything else.** [likely] The agent is
+   created the first time the service is used, and the bootstrap stack grants it publisher
+   on the rotation topic — a binding to a principal that does not exist yet is refused. One
+   command, and it is safe to repeat:
+
+   ```
+   gcloud beta services identity create --service=secretmanager.googleapis.com \
+     --project fetchpep-dev
+   ```
+
+   ```
+   verify: it prints   service-424117215837@gcp-sa-secretmanager.iam.gserviceaccount.com
+   ```
 1. **`fetchpep-bootstrap`, locally.** Creates the workload identity pool and provider, the
-   plan and apply service accounts, the two custom roles, and the VM's own service account.
-   The kill switch is in the same stack but a separate question (D-070, D-072).
+   plan and apply service accounts, the two custom roles, the VM's own service account and
+   the secret rotation topic. The kill switch is in the same stack but a separate question
+   (D-070, D-072).
+
+   **Read the plan before applying.** It should show **no change to any kill-switch
+   resource**. Nothing in this brief touches `kill_switch.tf`: its blob is `40496fa7ab17`
+   and `versions.tf`'s is `de0e78def58b`, the same on `main` as on the branch, and the last
+   commit to touch either is `f5261fb`, the third PR #9 review. Check with
+   `git rev-parse <ref>:infra/bootstrap/kill_switch.tf`. But the blob only says the file did
+   not change — the plan is the thing that says no kill-switch *resource* changed, and that
+   is what to read.
 2. **Set the workspace variables** on `fetchpep-dev`, from `terraform output
    tfc_workspace_variables`: `TFC_GCP_PROVIDER_AUTH`, `TFC_GCP_WORKLOAD_PROVIDER_NAME`,
    `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL`, `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL`. None is a
    secret.
-3. **Apply `fetchpep-dev` once with `-target` on the secrets**, or apply the whole stack and
-   expect the VM to fail its first boot. The containers must exist before there are versions
-   to put in them, and the VM refuses to start without a version of every secret:
+3. **Get the secret containers made before the VM boots.** The containers must exist before
+   there are versions to put in them, and the VM refuses to start without a version of
+   every secret. Two ways, and which one is available depends on the workspace:
 
-   ```
-   terraform apply -target=google_secret_manager_secret.nakama
-   ```
+   - `terraform apply -target=google_secret_manager_secret.nakama` — but [likely] HCP
+     Terraform refuses a CLI-driven apply on a workspace connected to VCS, and `fetchpep-dev`
+     is Remote.
+   - **The fallback, which always works:** apply the whole stack and let the first boot
+     fail. The startup script exits with `a secret came back empty` and the names, nothing
+     is half-configured, and step 4 then step 6's reboot finish the job.
 4. **Create a version of each secret.** Values never pass through Terraform, a file, or an
    agent (D-089):
 
@@ -419,11 +444,19 @@ Same for every secret:
 ```
 openssl rand -base64 33 | tr -d '\n' | tr '+/' '-_' \
   | gcloud secrets versions add <name> --data-file=- --project fetchpep-dev
-gcloud compute instances reset fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev
+
+gcloud compute ssh fetchpep-dev-nakama --zone europe-west2-a --project fetchpep-dev \
+  --tunnel-through-iap --command 'sudo reboot'
 ```
 
-The reboot re-runs the startup script, which reads `latest` and rewrites `.env` and
-`nakama.runtime.yml`. Then disable the old version.
+**`sudo reboot`, not `gcloud compute instances reset`.** [certain] `reset` is a power cut:
+it does not flush anything, and PostgreSQL comes back through crash recovery every time.
+A clean shutdown costs a few seconds and skips that. `stop` then `start` is equally fine.
+
+The reboot re-runs the startup script, which stops the containers, reads `latest`, rewrites
+`.env` and `nakama.runtime.yml`, and brings everything up **force-recreated** — which is
+what makes a rotation take effect rather than leaving the old value in a running container.
+Then disable the old version.
 
 What each one costs, which is the part worth knowing before starting:
 

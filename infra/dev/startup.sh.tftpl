@@ -2,10 +2,22 @@
 # Runs as root at every boot (Container-Optimized OS honours the startup-script key).
 # Idempotent: a reboot re-runs it and nothing is created twice.
 #
-# What it does: mounts the database disk, writes the service's files out of instance
-# metadata, fetches the secrets from Secret Manager with the VM's own service account,
-# renders the Nakama config, reconciles the database role's password with the secret, and
-# brings the containers up.
+# **The order below is the load-bearing part, and two faults came out of getting it wrong.**
+# The containers are `restart: unless-stopped`, so Docker starts them at boot on its own,
+# before this script runs a line. That meant:
+#
+#   - PostgreSQL could start before the data disk was mounted. Its bind source did not exist
+#     on the boot disk, Docker created it, and the entrypoint ran initdb into it. Mounting
+#     the disk afterwards hid that directory from everything except the process already
+#     using it, so the server came up healthy and empty with the real database sitting
+#     unmounted. Nothing would have looked wrong.
+#   - A rotated secret never reached Nakama. The script rendered a new nakama.runtime.yml,
+#     but `up -d` does not recreate a container whose Compose configuration has not changed,
+#     and the *contents* of a bind-mounted file are not part of that configuration. Nakama
+#     kept the old keys.
+#
+# So: stop everything first, mount, then bring it up from nothing. `down` at the top is what
+# makes the rest of the script mean what it says.
 #
 # No secret is ever echoed, none is ever passed as an argument, and there is no `set -x`.
 # Anything printed here goes to the serial console and to Cloud Logging, and logs are a data
@@ -20,6 +32,7 @@ PROJECT="${project_id}"
 SECRET_NAMES="${secret_names}"
 
 COMPOSE="$APP_DIR/bin/docker-compose"
+FILES="-f docker-compose.yml -f docker-compose.vm.yml"
 
 log() { echo "fetchpep-startup: $1"; }
 
@@ -27,6 +40,32 @@ md() {
   curl -sf -H 'Metadata-Flavor: Google' \
     "http://metadata.google.internal/computeMetadata/v1/$1"
 }
+
+mkdir -p "$APP_DIR/migrations" "$APP_DIR/build" "$APP_DIR/bin"
+cd "$APP_DIR"
+
+# ---------------------------------------------------------------- somewhere to execute
+# [certain] Container-Optimized OS mounts /var `noexec` — it is part of the image's
+# hardening, and the CIS benchmark for COS checks for it. A binary written anywhere under
+# /var therefore fails with "Permission denied" whatever its mode is.
+#
+# So `bin/` gets its own bind-mount with exec, and only `bin/`: the files fetched below came
+# off the network and stay on a noexec mount. A bind-mount does not survive a reboot, which
+# is why this runs every time. It has to run before the `down` below, because that needs the
+# Compose binary.
+if findmnt -no OPTIONS --target "$APP_DIR/bin" | grep -q noexec; then
+  log "giving $APP_DIR/bin an exec mount"
+  mount --bind "$APP_DIR/bin" "$APP_DIR/bin"
+  mount -o remount,bind,exec,nosuid,nodev "$APP_DIR/bin"
+fi
+
+# ---------------------------------------------------------------- stop what Docker started
+# Before the mount, and before anything else. Not `down -v`: the named volume is not used on
+# the VM, and removing volumes is never what a reboot should do.
+if [ -x "$COMPOSE" ] && [ -f docker-compose.yml ] && [ -f docker-compose.vm.yml ]; then
+  log "stopping containers Docker restarted at boot"
+  "$COMPOSE" $FILES down --remove-orphans || true
+fi
 
 # ---------------------------------------------------------------- the database disk
 # Its own disk so that replacing the VM does not take the database with it
@@ -42,6 +81,14 @@ if ! mountpoint -q "$PGDATA_DIR"; then
   log "mounting the database disk"
   mount -o discard,defaults "$DEV" "$PGDATA_DIR"
 fi
+
+# Nothing starts without it. An unmounted data disk is the one failure that would otherwise
+# look like success.
+if ! mountpoint -q "$PGDATA_DIR"; then
+  log "$PGDATA_DIR is not a mount point — refusing to start"
+  exit 1
+fi
+
 # A subdirectory, not the mount root: ext4 puts lost+found at the root and PostgreSQL
 # refuses to initialise a data directory that is not empty.
 mkdir -p "$PGDATA_DIR/data"
@@ -50,29 +97,14 @@ mkdir -p "$PGDATA_DIR/data"
 # Each file is its own metadata key, so nothing has to be escaped into a shell heredoc and
 # the plan shows each file's contents as its own diff.
 log "writing files from instance metadata"
-mkdir -p "$APP_DIR/migrations" "$APP_DIR/build" "$APP_DIR/bin"
-cd "$APP_DIR"
 md instance/attributes/fetchpep-compose        > docker-compose.yml
+md instance/attributes/fetchpep-compose-vm     > docker-compose.vm.yml
 md instance/attributes/fetchpep-nakama-config  > nakama.yml
 md instance/attributes/fetchpep-render-config  > render-config.sh
 md instance/attributes/fetchpep-migrate-run    > migrations/run.sh
 md instance/attributes/fetchpep-migration-0001 > migrations/0001_directory.sql
 md instance/attributes/fetchpep-migration-0002 > migrations/0002_shard_gi.sql
 md instance/attributes/fetchpep-module         > build/index.js
-
-# ---------------------------------------------------------------- somewhere to execute
-# [certain] Container-Optimized OS mounts /var `noexec` — it is part of the image's
-# hardening, and the CIS benchmark for COS checks for it. A binary written anywhere under
-# /var therefore fails with "Permission denied" no matter what its mode is.
-#
-# So `bin/` gets its own bind-mount with exec, and only `bin/`: the files above, which came
-# off the network, stay on a noexec mount. A bind-mount does not survive a reboot, which is
-# why this runs every time rather than once.
-if findmnt -no OPTIONS --target "$APP_DIR/bin" | grep -q noexec; then
-  log "giving $APP_DIR/bin an exec mount"
-  mount --bind "$APP_DIR/bin" "$APP_DIR/bin"
-  mount -o remount,bind,exec,nosuid,nodev "$APP_DIR/bin"
-fi
 
 # ---------------------------------------------------------------- docker compose
 # COS ships Docker but not Compose, and /usr is read-only, so the plugin cannot be installed
@@ -95,6 +127,10 @@ if ! "$COMPOSE" version >/dev/null 2>&1; then
   findmnt -no TARGET,OPTIONS --target "$APP_DIR/bin" || true
   exit 1
 fi
+
+# On the first boot the binary did not exist when the `down` above was tried. Everything is
+# stopped by now anyway on a first boot, but say it plainly rather than assume it.
+"$COMPOSE" $FILES down --remove-orphans >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------- the secrets
 # The VM's service account may read exactly these and nothing else (secrets.tf).
@@ -144,23 +180,33 @@ set +a
 sh render-config.sh "$APP_DIR/nakama.runtime.yml"
 
 # ---------------------------------------------------------------- start
-# PostgreSQL first, on its own, because of the step after it.
+# PostgreSQL first, on its own, because of the step after it. Everything was brought down
+# above, so this is a new container reading the config as it is now.
 log "starting the database"
-"$COMPOSE" -f docker-compose.yml up -d --wait postgres
+"$COMPOSE" $FILES up -d --wait postgres
 
 # [certain] POSTGRES_PASSWORD is read by the image's entrypoint only when it initialises an
 # empty data directory. On every later boot the role keeps whatever password it already had,
 # so rotating nakama-db-password would change .env, change the address Nakama dials, and
 # leave the role unchanged — Nakama would then fail to authenticate against its own
-# database. This reconciles the two on every boot, which makes the rotation a restart.
+# database. This reconciles the two, which makes that rotation a reboot.
 #
-# It runs over the container's Unix socket, where the official image trusts local
-# connections, so it needs no password to set one. The statement goes in on stdin, never in
-# argv, so the new value is not visible in `ps` inside the container (R-SEC-06).
+# It runs here, with PostgreSQL up and **Nakama not yet started**, so no connection is
+# pulled out from under a running server. It goes over the container's Unix socket, where
+# the official image trusts local connections, so it needs no password to set one. The
+# statement is on stdin, never in argv, so the new value is not visible in `ps` inside the
+# container (R-SEC-06) — and `log_min_error_statement = panic` for this session only, so
+# that a failure cannot write the statement, password and all, into the PostgreSQL log.
 log "reconciling the database role with the secret"
-printf "ALTER ROLE nakama WITH PASSWORD '%s';\n" "$NAKAMA_DB_PASSWORD" \
-  | "$COMPOSE" -f docker-compose.yml exec -T postgres psql -q -v ON_ERROR_STOP=1 -U nakama -d nakama -f -
+{
+  printf "SET log_min_error_statement = panic;\n"
+  printf "ALTER ROLE nakama WITH PASSWORD '%s';\n" "$NAKAMA_DB_PASSWORD"
+} | "$COMPOSE" $FILES exec -T postgres psql -q -v ON_ERROR_STOP=1 -U nakama -d nakama -f -
 
+# `--force-recreate` even though `down` already removed everything: the contents of a
+# bind-mounted file are not part of a container's Compose configuration, so without it a
+# container that happened to survive would keep the old nakama.runtime.yml and a rotation
+# would silently not take effect. Belt as well as braces, and cheap.
 log "starting the rest"
-"$COMPOSE" -f docker-compose.yml up -d --wait
+"$COMPOSE" $FILES up -d --wait --force-recreate
 log "up"

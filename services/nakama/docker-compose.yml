@@ -26,10 +26,10 @@ services:
       # Corruption that is not detected is corruption that gets backed up.
       POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
-      # A named volume locally, a path on the database disk on the VM. On the VM the
-      # database must not live on the boot disk, because a boot disk is a thing that gets
-      # replaced (infra/dev/vm_nakama.tf).
-      - ${PGDATA_PATH:-pgdata}:/var/lib/postgresql/data
+      # A named volume. On the VM `docker-compose.vm.yml` replaces this with a bind to the
+      # database's own disk, because there the database must not live on the boot disk —
+      # a boot disk is a thing that gets replaced (infra/dev/vm_nakama.tf).
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       # `-h 127.0.0.1`, not the default. Without it pg_isready checks the Unix socket, and
       # the image's entrypoint runs a temporary server on the socket *while it initialises*

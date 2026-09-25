@@ -17,13 +17,14 @@ variable "snapshot_retention_days" {
 
 variable "first_rotation_time" {
   description = <<-EOT
-    When the first rotation notice fires, RFC 3339 and in the future at apply time. Secret
-    Manager moves it on by each secret's period after that, and `ignore_changes` in
-    secrets.tf keeps Terraform from dragging it back. It is an input rather than a computed
-    value because `timestamp()` would make every plan show a change.
+    The base the first rotation notice is measured from, RFC 3339. Each secret's first
+    notice is this plus its own period, so the 365-day secrets do not fire on the same day
+    as the 90-day ones. Secret Manager moves each on by its period after that, and
+    `ignore_changes` in secrets.tf keeps Terraform from dragging it back. It is an input
+    rather than a computed value because `timestamp()` would make every plan show a change.
   EOT
   type        = string
-  default     = "2026-12-01T03:00:00Z"
+  default     = "2026-10-01T03:00:00Z"
 
   validation {
     condition     = can(formatdate("YYYY-MM-DD", var.first_rotation_time))
