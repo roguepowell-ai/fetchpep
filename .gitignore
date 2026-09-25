@@ -64,6 +64,14 @@ crash.log
 !*.tfvars.example
 infra/**/.build/
 
+# Saved plans and the address list checked against them (ops/RUNBOOK.ops.md Part 5 step 1).
+# The runbook writes both to /tmp, which is where they belong: a plan file carries every
+# variable value that went into it. These lines are the belt for anyone who runs the command
+# in place anyway.
+*.tfplan
+trust.plan
+planned.txt
+
 # ---- Claude Code ----
 # Per-seat permission grants (D-087). The seat's own file, never the repo's: a grant that
 # travels with a clone is a grant nobody chose. The machine's global ignore already covers

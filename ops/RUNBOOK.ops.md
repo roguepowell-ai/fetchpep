@@ -443,14 +443,12 @@ Each step needs the one before it.
    every apply.
 
    ```
-   gcloud services enable \
-     cloudresourcemanager.googleapis.com iam.googleapis.com \
-     iamcredentials.googleapis.com sts.googleapis.com \
-     pubsub.googleapis.com secretmanager.googleapis.com \
-     compute.googleapis.com iap.googleapis.com oslogin.googleapis.com \
-     logging.googleapis.com monitoring.googleapis.com \
-     --project fetchpep-dev
+   gcloud services enable cloudresourcemanager.googleapis.com iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com pubsub.googleapis.com secretmanager.googleapis.com compute.googleapis.com iap.googleapis.com oslogin.googleapis.com logging.googleapis.com monitoring.googleapis.com --project fetchpep-dev
    ```
+
+   **George may have run this already, and it is safe to repeat.** Enabling a service that
+   is already on is a no-op. Running it twice costs a few seconds and nothing else, so if in
+   doubt, run it.
 
    **The kill switch's own services are deliberately not in that list** — no
    `billingbudgets`, `cloudbilling`, `cloudfunctions`, `cloudbuild`, `run`, `eventarc`,
@@ -510,7 +508,7 @@ Each step needs the one before it.
    ```
    cd ~/fetchpep/infra/bootstrap
    terraform init                    # creates the workspace; then set Execution mode Local
-   terraform plan -out=trust.plan \
+   terraform plan -out=/tmp/trust.plan \
      -var billing_account=<the billing account id> \
      -var warn_amount=10 -var kill_amount=30 \
      -target=google_project_service.federation \
@@ -538,8 +536,8 @@ Each step needs the one before it.
    "kill" in the address.
 
    ```
-   terraform show -json trust.plan | jq -r '.resource_changes[].address' \
-     | sed 's/\[.*\]//' | sort -u > planned.txt
+   terraform show -json /tmp/trust.plan | jq -r '.resource_changes[].address' \
+     | sed 's/\[.*\]//' | sort -u > /tmp/planned.txt
    ```
 
    The `sed` is load-bearing. A `for_each` resource appears in the plan with its instance
@@ -570,7 +568,7 @@ Each step needs the one before it.
             google_storage_bucket.source \
             google_storage_bucket_object.function \
             google_cloudfunctions2_function.kill_switch ; do
-     grep -qx "$a" planned.txt && echo "STOP: $a is in the plan (D-099)"
+     grep -qx "$a" /tmp/planned.txt && echo "STOP: $a is in the plan (D-099)"
    done
    ```
 
@@ -578,13 +576,20 @@ Each step needs the one before it.
    verify: the loop prints nothing at all (D-099, D-072)
    ```
 
-   **If the apply fails on a permission or a disabled service, run the same plan and apply
-   again.** Enabling an API is not instant, and a call made in the same apply that switched
-   it on can arrive before it has propagated. The `depends_on` in `workload_identity.tf`
-   orders it, but ordering is not waiting. Nothing here is harmed by a second run: every
-   resource is created once and named the same way.
+   **If the apply fails, run the whole of step 1 again** — the
+   `terraform plan … -out=/tmp/trust.plan` command, then the verify loop, then the apply.
+   [certain] A saved plan cannot be applied twice: once Terraform has used it, the file is
+   spent, and `terraform apply /tmp/trust.plan` refuses it rather than retrying. **A fresh
+   plan is the retry**, and the verify loop has to run against the fresh one — it is the new
+   plan that needs checking, not the old one.
 
-   Then `terraform apply trust.plan`.
+   The usual reason for needing a second go is timing: enabling an API is not instant, and a
+   call made soon after can arrive before it has propagated. Step 0 switches everything on
+   well in advance, which is most of why it exists. Nothing is harmed by a second run: every
+   resource is created once and named the same way, so the second plan simply has less to
+   do.
+
+   Then `terraform apply /tmp/trust.plan`.
 
    **Every later change to this stack needs the same `-target` list, until launch.** A plain
    `terraform apply` in `infra/bootstrap` would create the whole kill switch, dry-run or not.
@@ -778,7 +783,8 @@ Each step needs the one before it.
    ```
 
    Pipe it through `python3 -c 'import sys,json;print(json.load(sys.stdin)["payload"])'` to
-   read it, or add `&unwrap` to the URL.
+   read it. That is the form that was actually run; nothing else here is worth taking on
+   trust.
 
    ```
    verify: publish_release  →  payload {"outcome":"applied","release":1,"phases":1,

@@ -18,7 +18,7 @@
 # by the one apply that already runs with George's own rights, and `infra/dev` only reads it.
 
 # ------------------------------------------------------------------------ APIs
-# **Every API this stack needs is declared here, including four that `kill_switch.tf` also
+# **Every API this stack needs is declared here, including three that `kill_switch.tf` also
 # names.**
 #
 # This file used to declare only what that one did not, and lean on its
