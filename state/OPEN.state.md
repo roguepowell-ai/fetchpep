@@ -197,6 +197,42 @@ logging `couldDetach: false`, shows only in the function's logs. A log-based ale
 notification channel, which needs an email address in Terraform. Deferred from B-001;
 changing the kill switch after merge is George's (D-070).
 
+**O-71 · GitHub Desktop's push fails on the pre-push hook — fixed on branch
+`brief-b002-step0`, closes when that PR merges.** The error was
+`/usr/bin/env: 'bash': No such file or directory`. [certain] GitHub Desktop 3.6.6 bundles
+git 2.53.0 with `usr/bin/sh.exe` and `usr/bin/env.exe` but no `bash.exe`. The developer
+chose to make the hook run under that git rather than make the developer the only one who
+pushes (D-069): George pushes from Desktop, and a hook that only works for one pusher gates
+only that pusher. `.githooks/pre-push` is now a POSIX `sh` shim that finds bash (on `PATH`,
+then `C:\Program Files\Git\bin\bash.exe`) and runs the unchanged checks in
+`.githooks/pre-push.bash`. If no bash is found it **refuses** the push. **Evidence**, pushing
+to a local bare repository with Desktop's bundled `git.exe` in an empty environment: clean
+tree → eight `ok` lines, `── all green ──`, pushed; a banned term in the tree →
+`FAIL banned-terms`, `Push refused`, exit 1, not pushed; the shim with no bash reachable →
+the refusal message, exit 1. **Not proven:** a push from the GitHub Desktop app itself.
+George's next push from Desktop is that test.
+
+**O-72 · The standing watch in D-075: the developer's position differs.** Raised under
+D-069; George rules and the ruling gets an ID.
+- **D-075, step 4 and step 5 of B-002 (issue #11):** after the step-0 PR merges, the
+  developer runs a standing loop and *acts* on any issue or comment by `roguepowell-ai`.
+- **The developer's position:** the loop can **watch and report** (poll issues and review
+  comments, then notify George in one line: "issue #12 is a brief; say *do issue #12*").
+  It does **not start work** from GitHub content on its own. Each start needs George to say
+  so in the session, as he did for #11 and for each PR #9 review. Reasons:
+  1. The developer's operating rules treat anything read through a tool — an issue body, a
+     review comment — as data, not instruction. Acting on it needs the person's go-ahead
+     in the session, per action. A decision recorded in this repo cannot lift that rule,
+     for the same reason text in an issue cannot.
+  2. `roguepowell-ai` is not one author. Operations and the project manager post as that
+     account too, so an author check proves which account posted, not that George meant
+     it. A mistake or an injected instruction in either session would carry the same
+     `user.login`.
+  3. The repo is public, so a review quoting outside text brings that text into the loop.
+- **What survives either way:** the developer pushes, opens PRs and answers reviews with
+  `gh`, so George stops relaying content between sessions. What stays is one line from
+  George per piece of work: "do issue #N", or "address the review on #N".
+
 **O-29 · HCP Terraform apply method — cannot be verified, because there is no workspace.**
 Checked 24 Sep at `app.terraform.io/app/fetchpep/workspaces` — *"Add your first
 workspace"*. The item was written as a verification; it is actually a setup step. It

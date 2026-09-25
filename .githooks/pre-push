@@ -1,56 +1,29 @@
-#!/usr/bin/env bash
-# Refuses a push when any contract check fails.
+#!/bin/sh
+# Finds bash and runs the real hook, .githooks/pre-push.bash (O-71).
 #
-# This is NOT a replacement for a server-side gate — a human can bypass it with
-# --no-verify, and it does not exist in a fresh clone until core.hooksPath is set.
-# It earns its place for a different reason: it fails in SECONDS, locally, before
-# the push leaves the machine. CI takes a minute and needs a round trip. For an
-# agent working in a loop, the difference between 3 seconds and 90 is the
-# difference between a tight loop and a slow one.
+# GitHub Desktop's bundled git has sh but no bash, so a hook that starts
+# "#!/usr/bin/env bash" fails there before any check runs. This shim is POSIX sh, which
+# every git on Windows can run. It never skips the checks: if no bash is found, the push is
+# refused, not waved through.
 #
-# Enable once per clone:
-#   git config core.hooksPath .githooks
-set -uo pipefail
+# stdin (the refs being pushed) and the arguments pass straight through to the real hook.
+# Shell built-ins only, so the refusal still prints on a PATH with no tools on it.
 
-root=$(git rev-parse --show-toplevel 2>/dev/null) || true
-if [ -z "$root" ]; then
-  echo "pre-push: not inside a git work tree — refusing rather than guessing." >&2
-  exit 1
-fi
-cd "$root" || exit 1
+hook="${0%/*}/pre-push.bash"
 
-checks=(
-  router-size router-links router-orphans
-  frontmatter banned-terms secrets versions naming
-)
-
-echo "── contract checks ──"
-fail=0
-for c in "${checks[@]}"; do
-  f="checks/$c.check.sh"
-  [ -f "$f" ] || { echo "   SKIP $c (missing)"; continue; }
-  if ! out=$(bash "$f" 2>&1); then
-    echo "$out" | sed 's/^/   /'
-    fail=1
-  else
-    echo "$out" | sed 's/^/   /'
+for b in \
+  "$(command -v bash 2>/dev/null)" \
+  "/c/Program Files/Git/bin/bash.exe" \
+  "/c/Program Files/Git/usr/bin/bash.exe"
+do
+  if [ -n "$b" ] && [ -x "$b" ]; then
+    exec "$b" "$hook" "$@"
   fi
 done
 
-if [ "$fail" -ne 0 ]; then
-  cat <<'MSG'
-
-Push refused: a contract check failed.
-
-Fix the cause, not the check — unless the check is wrong, in which case fix the
-check and prove both directions before pushing it.
-
-To push anyway:  git push --no-verify
-Doing that is a decision. If you find yourself doing it twice, the check is wrong
-or the rule is, and one of them needs changing rather than skipping.
-MSG
-  exit 1
-fi
-
-echo "── all green ──"
-exit 0
+printf '%s\n' \
+  "pre-push: no bash found, so the contract checks cannot run. Push refused." \
+  "" \
+  "Install Git for Windows (it provides C:\\Program Files\\Git\\bin\\bash.exe), or push from a" \
+  "shell that has bash on PATH. Skipping the checks is not the fix (O-71)." >&2
+exit 1
