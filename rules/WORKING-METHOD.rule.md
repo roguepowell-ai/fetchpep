@@ -43,7 +43,10 @@ constraint is worth binding him to, it is worth a decision he made.
 
 Write the question to `state/OPEN.state.md` and stop when the instruction is ambiguous and
 the wrong reading is expensive, when a decision is needed that has no ID, when the work
-touches money, a store, a keystore or a permanent identifier, or when no spec applies.
+touches money, a sign-in, an install outside the scratch folder, a store, a keystore, the
+kill switch or a permanent identifier, or when no spec applies. A question only the PM can
+answer goes as a comment on the issue or PR, and work carries on there (D-084, D-086).
+`state/OPEN.state.md` is for what stops (D-088).
 
 The characteristic failure of an agent is confident guessing, not refusal.
 
