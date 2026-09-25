@@ -24,9 +24,8 @@ it grows without limit, and an always-loaded file that grows eventually crowds o
 
 ## 2. Hard stops — the exception to "no rules here"
 
-Here rather than in a nested file, because a nested file **stops applying after a
-compaction** until that directory is read again, and a rule that silently expires is not a
-rule. Each is also enforced by a hook; this text exists so the refusal is comprehensible.
+Here rather than in a nested file, because a nested file **stops applying after a compaction** until that directory is read again, and a rule
+that silently expires is not a rule. Each is also enforced by a hook; this text exists so the refusal is comprehensible.
 
 - Never alter an existing asset **GUID**. Every reference in every scene and prefab
   resolves through it; changing one breaks things silently and untraceably.
@@ -115,8 +114,9 @@ Declared per file as `authority:` frontmatter. A hook refuses the write; CI is t
 ## 7. Stop conditions
 
 In `~/fetchpep`, a session acts on briefs (issues) and reviews (PR comments) posted by
-`roguepowell-ai` without asking George, and asks its questions there (D-086; the loop is
-`ops/RUNBOOK.ops.md` Part 4). It writes to `state/OPEN.state.md` and stops, not guessing, when:
+`roguepowell-ai` on this repo without asking George, and asks its questions there (D-086;
+the loop is `ops/RUNBOOK.ops.md` Part 4, and any opening message starts it: check out
+`main`, pull, work). It writes to `state/OPEN.state.md` and stops, not guessing, when:
 
 - The prompt is ambiguous and the wrong reading is expensive to undo
 - No route matches and the right spec is unclear
