@@ -83,18 +83,23 @@ append-only table. Key handling is in `spec/PRIVACY.spec.md`.
 > from. It becomes the schema when George merges it; until then nothing here is settled.
 > Tested — see *Evidence* at the end.
 
+**Where game data lives — D-079.** Nakama holds accounts, sign-in and sessions, in its own
+tables. Every piece of game data lives in `directory` and `shard_gi`, written by the
+TypeScript game logic. Nakama's key-value storage is not used for game data. Unverified:
+that the TypeScript runtime can write to these tables. The VM brief proves it first.
+
 ### Where it lives
 
 ```
  PostgreSQL 16 on the Nakama VM, London (D-063)
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │ public      Nakama's own tables — accounts, devices, storage. Nakama migrates │
- │             them; we never write to them by hand (O-54)                       │
+ │ public      Nakama's own tables — accounts, sign-in, sessions. Nakama migrates│
+ │             them; we never write to them, and no game data goes in (D-079)    │
  ├──────────────────────────────────────────────────────────────────────────────┤
  │ directory   global, low write — changes arrive through the doors (D-066)      │
  │   places ─ release ─ phase ─ species ─ catalogue ─ encounter tables           │
- │   item_kind · gear · recipe · room_kind · quest                               │
- │   member · person_key · fold_membership · fold_device · block                 │
+ │   item_kind · gear · recipe · room_kind · quest · name_filter                 │
+ │   member · person_key · fold_membership · fold_invite · block                 │
  │   door_log (audit) · schema_migration · v_seam_violations                     │
  ├────────────────── THE SEAM — no foreign keys, no joins (D-051) ───────────────┤
  │ shard_gi    one shared instance, high write — written by play (D-066)         │
@@ -158,7 +163,7 @@ services/nakama/
 - **Migrations** are numbered, run in order, and never edited once merged: a change is a new
   file. Each run is recorded in `directory.schema_migration` with its hash.
 - **RPC ids** are `snake_case` verbs: `read_catalogue`, `start_encounter`, `resolve_encounter`,
-  `publish_release` (server key only), `apply_control` (server key only, O-60).
+  `publish_release` (server key only), `apply_control` (server key only, D-081).
 - **Event types** are the list in the `play_event` check constraint. Adding one is a migration.
 - **Codename vs product name** (`rules/LANGUAGE.rule.md`): infrastructure says `fetchpep` —
   VM `fetchpep-dev-nakama`, buckets `fetchpep-dev-sprites` and `fetchpep-prod-sprites`.
@@ -166,7 +171,9 @@ services/nakama/
 - **R2 object keys**: `catalogue/<catalogue_id>/<sha256-12>.atlas.png` and `.atlas.json` —
   content-hashed, so a sprite is never overwritten in place; `release/<0001>/manifest.json`.
 - **Secret Manager**: `nakama-db-password`, `nakama-server-key`, `nakama-http-key` (the doors),
-  `nakama-console-password`. Values never in the repo (R-SEC-01).
+  `nakama-console-password`, `invite-email-hmac-key` (D-080; proposed, shared with the
+  website; where it lives is part of the VM brief, issue #13). Values never in the repo
+  (R-SEC-01).
 
 ### Migration 0001 — `directory`
 
@@ -324,11 +331,24 @@ CREATE TABLE directory.quest (
     release_number  integer     NOT NULL REFERENCES directory.release (number)
 );
 
--- ---------------------------------------------------------------- game identity (D-054; O-47, O-54, O-55 open)
+-- ---------------------------------------------------------------- the name filter (D-077)
+-- The blocked-word list that specimen names pass before anyone outside the member sees
+-- them. Proposed (D-069): it is release data, arriving through the publish door like the
+-- catalogue, so it is versioned and never sits in the public repo. A version never changes
+-- once published; a new list is a new version.
+CREATE TABLE directory.name_filter (
+    version         integer     PRIMARY KEY CHECK (version > 0),
+    words           text[]      NOT NULL,           -- matched as whole words, case-folded
+    release_number  integer     NOT NULL REFERENCES directory.release (number),
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------- game identity (D-054, D-076, D-079, D-080; O-47 open)
+-- One login per member, and the login is the member (D-076): no device pairing, no picker.
 -- Ages never enter the game database: capabilities are stored, not the reason for them.
 CREATE TABLE directory.member (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    nakama_user_id  uuid        UNIQUE,             -- Nakama's own account row (O-54)
+    nakama_user_id  uuid        UNIQUE,             -- Nakama's own account row (D-079)
     display_name_enc bytea      NOT NULL,           -- encrypted under the person's key (D-044)
     tag_enc         bytea,                          -- maker tag, if they make (D-056)
     capabilities    jsonb       NOT NULL DEFAULT '{}',
@@ -346,6 +366,8 @@ CREATE TABLE directory.person_key (
 
 CREATE TYPE directory.fold_role AS ENUM ('steward', 'member');
 
+-- The steward administers the fold and is a member in their own right (D-076): one row, with
+-- role 'steward'. Steward status and membership changes arrive through apply_control (D-081).
 CREATE TABLE directory.fold_membership (
     fold_id         uuid        NOT NULL REFERENCES directory.place (id),
     member_id       uuid        NOT NULL REFERENCES directory.member (id),
@@ -357,15 +379,7 @@ CREATE TABLE directory.fold_membership (
 CREATE UNIQUE INDEX one_steward_per_fold
     ON directory.fold_membership (fold_id) WHERE role = 'steward' AND removed_at IS NULL;
 
--- "This phone is already ours." How a phone is paired is open (O-55).
-CREATE TABLE directory.fold_device (
-    device_hash     text        PRIMARY KEY,        -- a hash, never the raw device id
-    fold_id         uuid        NOT NULL REFERENCES directory.place (id),
-    paired_at       timestamptz NOT NULL DEFAULT now(),
-    revoked_at      timestamptz
-);
-
--- Blocking never erases work (Housekeeping board).
+-- Blocking never erases work (Housekeeping board). Blocks arrive through apply_control (D-081).
 CREATE TABLE directory.block (
     fold_id         uuid        NOT NULL REFERENCES directory.place (id),
     blocked_member  uuid        NOT NULL REFERENCES directory.member (id),
@@ -375,7 +389,8 @@ CREATE TABLE directory.block (
 );
 
 -- ---------------------------------------------------------------- audit: the doors (D-066)
--- Every server-to-server call into the game, applied or not. 'control' is proposed (O-60).
+-- Every server-to-server call into the game, applied or not. 'control' is apply_control,
+-- the one live door (D-081).
 CREATE TABLE directory.door_log (
     id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     door            text        NOT NULL CHECK (door IN ('publish', 'control')),
@@ -387,11 +402,46 @@ CREATE TABLE directory.door_log (
     received_at     timestamptz NOT NULL DEFAULT now()
 );
 
+-- ---------------------------------------------------------------- invites (D-080, D-081, D-082)
+-- No fold can be joined without an invite. The steward invites an email on the website; the
+-- invite arrives through apply_control; a member who signs in with that email is matched.
+-- Proposed (D-069, following D-044): the address is never stored. email_hmac is
+-- HMAC-SHA256, under invite-email-hmac-key, of the address trimmed, NFC-normalised and
+-- lower-cased, with no provider-specific rewriting. The website sends the HMAC, not the
+-- address; the game computes the same HMAC from the signed-in account's email. A keyed hash
+-- rather than a plain one, because an email address is guessable and a plain hash of it is
+-- a lookup away from the address. A mismatch, such as a relay address, is handled by people
+-- (D-082).
+CREATE TABLE directory.fold_invite (
+    id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    fold_id         uuid        NOT NULL REFERENCES directory.place (id),
+    email_hmac      bytea,                          -- cleared once accepted or revoked (D-044)
+    hmac_key_version smallint   NOT NULL,           -- which version of the key made it
+    door_log_id     bigint      NOT NULL REFERENCES directory.door_log (id),   -- the call that made it
+    invited_at      timestamptz NOT NULL DEFAULT now(),
+    expires_at      timestamptz NOT NULL,
+    accepted_at     timestamptz,
+    accepted_by     uuid        REFERENCES directory.member (id),
+    revoked_at      timestamptz,
+    CONSTRAINT fold_invite_expiry_after_invite CHECK (expires_at > invited_at),
+    CONSTRAINT fold_invite_accept_names_member CHECK ((accepted_at IS NULL) = (accepted_by IS NULL)),
+    CONSTRAINT fold_invite_hash_while_open     CHECK (email_hmac IS NOT NULL
+                                                      OR accepted_at IS NOT NULL
+                                                      OR revoked_at IS NOT NULL)
+);
+-- One open invite per fold and address; the lookup at sign-in is by address.
+CREATE UNIQUE INDEX fold_invite_one_open ON directory.fold_invite (fold_id, email_hmac)
+    WHERE accepted_at IS NULL AND revoked_at IS NULL;
+CREATE INDEX fold_invite_lookup ON directory.fold_invite (email_hmac)
+    WHERE accepted_at IS NULL AND revoked_at IS NULL;
+
 -- ---------------------------------------------------------------- append-only, by database rule
 CREATE RULE door_log_no_update AS ON UPDATE TO directory.door_log DO INSTEAD NOTHING;
 CREATE RULE door_log_no_delete AS ON DELETE TO directory.door_log DO INSTEAD NOTHING;
 CREATE RULE release_no_update  AS ON UPDATE TO directory.release  DO INSTEAD NOTHING;
 CREATE RULE release_no_delete  AS ON DELETE TO directory.release  DO INSTEAD NOTHING;
+CREATE RULE name_filter_no_update AS ON UPDATE TO directory.name_filter DO INSTEAD NOTHING;
+CREATE RULE name_filter_no_delete AS ON DELETE TO directory.name_filter DO INSTEAD NOTHING;
 
 -- ---------------------------------------------------------------- the seam check (D-051)
 -- CI requires zero rows.
@@ -426,7 +476,7 @@ CREATE SCHEMA shard_gi;
 -- gameplay state, keyed by the same id. Resolves O-56 if accepted.
 CREATE TABLE shard_gi.fold_state (
     fold_id         uuid        PRIMARY KEY,        -- = directory.place.id where kind = 'fold'
-    visitor_lock    text        NOT NULL DEFAULT 'when_out'
+    visitor_lock    text        NOT NULL DEFAULT 'when_out'      -- set by apply_control (D-081)
                                 CHECK (visitor_lock IN ('open', 'when_out', 'locked')),
     plot_seed       bigint      NOT NULL,
     standing        text        NOT NULL DEFAULT 'smallholding',
@@ -446,7 +496,7 @@ CREATE TABLE shard_gi.play_event (
                         'gear_unlocked', 'pen_changed', 'gift_left', 'gift_collected',
                         'visit', 'quest_accepted', 'quest_completed', 'fair_shown',
                         'room_built', 'shelf_changed', 'setting_changed',
-                        'notification_sent', 'report_filed')),
+                        'notification_sent', 'report_filed', 'invite_accepted')),
     member_id       uuid,                           -- null only for server-clock events
     fold_id         uuid,
     place_id        uuid,
@@ -505,13 +555,18 @@ CREATE TABLE shard_gi.capture (
 CREATE INDEX capture_member    ON shard_gi.capture (caught_by, caught_at);
 CREATE INDEX capture_catalogue ON shard_gi.capture (catalogue_id);
 
--- The name a member gives. Free text: who sees it and how it is checked is open (O-62).
+-- The name a member gives. It passes the blocked-word list (directory.name_filter) before
+-- anyone outside the member sees it (D-077). 'pending' and 'refused' are seen by the member
+-- alone; 'ok' is seen by others. A refusal never shames and never says which word
+-- (rules/LANGUAGE).
 CREATE TABLE shard_gi.specimen_name (
     capture_id      uuid        PRIMARY KEY REFERENCES shard_gi.capture (id),
     name_enc        bytea       NOT NULL,
     status          text        NOT NULL DEFAULT 'pending'
                                 CHECK (status IN ('pending', 'ok', 'refused')),
-    named_at        timestamptz NOT NULL DEFAULT now()
+    filter_version  integer,                        -- = directory.name_filter.version that decided it
+    named_at        timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT specimen_name_decided_by_a_list CHECK ((status = 'pending') = (filter_version IS NULL))
 );
 
 CREATE TABLE shard_gi.lure (
@@ -581,12 +636,14 @@ CREATE TABLE shard_gi.tray (
     updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
--- What people do with a creature. Credit is recorded against the creature's credentials:
--- in the pilot 'Joshua' has no member behind it (D-058). Who is credited is open (O-63).
+-- What people do with a creature. When a member feeds or keeps one, both its artist and its
+-- creator are recorded at that moment (D-078), copied from the catalogue's credentials: in
+-- the pilot 'Joshua' has no member behind it (D-058). 'kept' is written when a capture is
+-- placed in a pen slot; pen_day then counts it once a day.
 CREATE TABLE shard_gi.creature_interaction (
     id              bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     idempotency_key text        NOT NULL UNIQUE,
-    type            text        NOT NULL CHECK (type IN ('fed', 'fed_as_guest')),
+    type            text        NOT NULL CHECK (type IN ('fed', 'fed_as_guest', 'kept')),
     catalogue_id    uuid        NOT NULL,
     capture_id      uuid        REFERENCES shard_gi.capture (id),
     by_member       uuid        NOT NULL,
@@ -672,7 +729,8 @@ CREATE TABLE shard_gi.notification (
 );
 CREATE INDEX notification_member ON shard_gi.notification (member_id, sent_at);
 
--- Four buttons, no free text, nobody named. Where reports go is open (O-60).
+-- Four buttons, no free text, nobody named. A report must reach a person (D-081); how it
+-- travels out is for the brief that builds the door.
 CREATE TABLE shard_gi.report (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     reporter        uuid        NOT NULL,
@@ -711,23 +769,24 @@ From the play scenarios of 24 Sep (26 member actions from the design boards).
 
 | Scenario | Tables | Status |
 |---|---|---|
-| Who's playing | `member`, `fold_membership`, `fold_device`, `play_event` | Tables ready; sign-in decision open (O-61) |
+| Sign-in (no picker) | `member`, `fold_membership`, `play_event` | Tables ready. One login per member, and the login is the member (D-076); sign-in methods open (O-47) |
+| Joining a fold by invite | `fold_invite`, `door_log`, `fold_membership`, `play_event` | Tables ready (D-080, D-081). The keyed hash is proposed; the door itself is not built |
 | Walking, travelling | `place`, `play_event` | Covered |
 | Stillness, the line, the flush | `encounter_table`, `encounter_entry`, `encounter`, `roll_log`, `capture` | Covered |
 | The lure | `lure`, `item_ledger` | Covered; dusk timing and whether bait is spent open |
 | Blocked | `gear`, `play_event` | Covered |
-| Naming the catch | `specimen_name` | Table ready; moderation open (O-62) |
+| Naming the catch | `specimen_name`, `name_filter` | Tables ready; blocked-word list (D-077). The list's words are not written |
 | Foraging, crafting | `item_kind`, `item_ledger`, `recipe`, `gear`, `member_gear` | Covered |
-| The pen, feeding | `pen_slot`, `pen_day`, `tray`, `creature_interaction` | Tables ready; who is credited open (O-63) |
+| The pen, feeding | `pen_slot`, `pen_day`, `tray`, `creature_interaction` | Covered: artist and creator recorded on feeding and on keeping (D-078) |
 | Guest at the tray, gifts | `tray`, `creature_interaction`, `gift`, `item_ledger` | Covered |
-| Visiting | `fold_state`, `play_event` | Tables ready; how the steward's lock reaches the game open (O-60) |
+| Visiting | `fold_state`, `play_event` | Tables ready; the steward's lock arrives through `apply_control` (D-081), not built |
 | Quests | `quest`, `quest_progress` | Covered |
 | The fair | `play_event` | Partial: fair days are not modelled (O-65) |
 | Rooms, the shelf | `room_kind`, `house`, `room`, `shelf_item` | Covered |
 | Dusk, connection lost, closing | `play_event`, idempotency keys | Covered |
 | Settings | `member_setting` | Covered |
 | Notifications | `notification` | Table ready; no delivery channel (D-042) |
-| Report a problem | `report` | Table ready; where reports go open (O-60) |
+| Report a problem | `report` | Table ready; must reach a person (D-081), how it travels out not yet specified |
 
 **Not modelled yet (O-65):** things built on the land (fences, workbench — "two tile sets,
 one plot record"); where encounters sit on the map (tracks, burrows); weather; fair days;
@@ -735,11 +794,36 @@ avatar pieces unlocked by play; where NPCs stand.
 
 ### Evidence
 
-Command: `node test.mjs` against the two migrations above, on an embedded PostgreSQL 17.5
-(PGlite 0.3, with `ltree`). The VM will run 16; nothing used is newer than 16. Result:
-**18 passed, 0 failed** — migrations apply; the seam check returns zero rows and catches a
-foreign key added across the seam; the pilot catalogue read returns the Joshua creature; the
-place tree allows one world and refuses orphans; one steward per fold; an evening of play is
-recorded as 29 rows; the satchel sums correctly; feeding credits the creature's credentials;
-update and delete on append-only tables change nothing; a repeated idempotency key, a fourth
-recipe input, a seventh pen place and an unknown event type are all refused.
+Command: `node skeleton.test.mjs spec/DATA-MODEL.spec.md`, 25 Sep 2026. The test reads
+Migration 0001 and 0002 straight out of this file and applies them to an embedded
+PostgreSQL 17.5 (PGlite 0.3.16, with `ltree`). The VM will run 16; nothing used is newer than
+16. The script is in the issue #12 PR description; it is not in the repo. It replaces the
+earlier 18-check test, which ran from the FetchPep Project and was never in the repo.
+
+**Result: 30 passed, 0 failed, exit 0.**
+
+- **Structure:** both migrations apply; the seam check returns zero rows and catches a
+  foreign key added across the seam; `directory.fold_device` is gone (D-076).
+- **The place tree:** one world only; a node with no parent is refused.
+- **Membership (D-076):** the steward is one membership row with role `steward`; a second
+  steward for a fold is refused.
+- **Invites (D-080):** an invite is found by the HMAC of the signed-in email, normalised; a
+  second open invite for the same fold and email is refused; clearing an open invite's hash
+  is refused; accepting without naming the member is refused; accepting names the member,
+  clears the hash and joins the fold; an expiry before the invite is refused.
+- **Names (D-077):** a pending name needs no list version; marking a name ok without the list
+  version that decided it is refused; a published word list cannot be changed or deleted.
+- **Credit (D-078):** feeding and keeping each record the Joshua creature's artist and
+  creator; an unknown interaction type is refused.
+- **Play:** the satchel sums its ledger; update and delete on append-only tables change
+  nothing; a repeated idempotency key, an unknown event type, a fourth recipe input and a
+  seventh pen place are all refused. A sixth pen place with the same capture is accepted, so
+  the seventh fails on the slot alone.
+
+Every refusal check names the constraint it expects, so a refusal for another reason fails.
+**Both directions:** with the `kept` type, the name-list constraint and the word-list update
+rule removed from a copy of this file, exactly checks 18, 20 and 22 fail (27 passed, 3
+failed, exit 1).
+
+Not carried over from the earlier test: "an evening of play is recorded as 29 rows". The
+scenario behind that number is not in any store the developer can read.

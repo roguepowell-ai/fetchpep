@@ -38,7 +38,8 @@ only remedy. This check is the backstop; `hooks/guard-write.mjs` is the control.
 ## Where else these run
 
 `.githooks/pre-push` runs the same eight checks before a push leaves the machine, and
-refuses it on any failure. It is a POSIX `sh` shim that finds bash and runs
+refuses it on any failure. It is a POSIX `sh` shim that finds bash (on `PATH`, then
+`C:\Program Files\Git\bin\bash.exe`, then `C:\Program Files\Git\usr\bin\bash.exe`) and runs
 `.githooks/pre-push.bash`, because GitHub Desktop's bundled git has no bash (O-71). If no
 bash is found, the push is refused. Enable once per clone:
 
